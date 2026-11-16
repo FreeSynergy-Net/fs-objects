@@ -6,7 +6,15 @@ edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
 
+[features]
+# The v5 typed-table layer (docs/v5-entwurf.md); v4 users do not pull in fs-types and its Cap'n Proto dependency.
+v5 = ["dep:fs-types", "dep:getrandom"]
+
 [dependencies]
+# Shared basic types (ADR 0085, draft rule R13): no second copy of the time, person or id types here.
+fs-types = { git = "https://github.com/FreeSynergy/fs-interfaces", tag = "v0.0.22", optional = true }
+# OS randomness for UUIDv7 ids (already in the lock through the engine).
+getrandom = { version = "0.3", optional = true }
 # Pre-1.0 and API-churning: pinned exactly (see DESIGN.md).
 turso = { version = "=0.8.3", default-features = false }
 tokio = { version = "1", features = ["sync", "rt", "macros", "time"] }

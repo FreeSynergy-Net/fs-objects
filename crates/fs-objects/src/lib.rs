@@ -32,6 +32,8 @@ mod store;
 mod text;
 pub mod traits;
 mod turso;
+#[cfg(feature = "v5")]
+pub mod v5;
 
 pub use crypto::{Cipher, EncryptionKey, KeyProvider, StaticKeyProvider};
 pub use error::{Error, Result};

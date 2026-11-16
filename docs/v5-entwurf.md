@@ -1,6 +1,6 @@
 # fs-objects v5: draft (typed tables)
 
-Status: **draft for review**, 2026-11-16. No migration code, no schema change in `crates/fs-objects/src`. This file is the
+Status: **draft for review**, 2026-11-16. Build state (branch `unreviewed/v5-speicher`): step L1 is in `crates/fs-objects/src/v5/` (feature `v5`: registry, migration steps, store/transaction guard, `UUIDv7` ids, shared tables, typed row checks; see `DESIGN.md`); trash, revision, log, original and purge follow in L2. No migration v4 -> v5 yet. This file is the
 requirement list and the design sketch that the first user (fs-calendar) and the second user (fs-tasks) put on the next
 schema version. Opus reviews it before anything is built (pilot `programm-grundgeruest`, plan step O3 (b)).
 

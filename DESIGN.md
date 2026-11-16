@@ -285,4 +285,15 @@ threads; it fails with "database is locked" without the retry).
 
 ## Schema v5 (draft)
 
-* `docs/v5-entwurf.md` (2026-11-16, draft, no code): typed tables instead of JSON `content` (ADR 0086), the requirement list of the first user (fs-calendar) and the second (fs-tasks), the migration sketch v4 -> v5, and what the embedded engine can do (`tests/v5_probe.rs`). Nothing in `src/` changes until the review is done.
+* `docs/v5-entwurf.md` (2026-11-16, draft, no code): typed tables instead of JSON `content` (ADR 0086), the requirement list of the first user (fs-calendar) and the second (fs-tasks), the migration sketch v4 -> v5, and what the embedded engine can do (`tests/v5_probe.rs`). The reviewed draft is built step by step in `src/v5/` (see below).
+
+### v5 layer, step L1 (0.0.N candidate, no tag)
+
+* Feature `v5` (`crates/fs-objects/src/v5/`), off by default: v4 users do not pull in `fs-types` and its Cap'n Proto dependency. The v4 API is untouched.
+* Lifted from `fs-calendar-local` (pilot `programm-grundgeruest`, plan step L; source branch `unreviewed/kern-v5`, head 3f50112): `spec` (tables as data, `STRICT` DDL), `registry` (`fs_domain`, `fs_column`), `store` + `conn` (one connection, `PRAGMA foreign_keys = ON`, `BEGIN IMMEDIATE`, drop guard with rollback at the next access, one suspension point before `COMMIT`), `id` (`UUIDv7`: OS randomness, monotonic 12 bit counter, loud error without OS randomness), `codec`/`typed` (typed values and the checks of R2), `tables`/`tables_more` (setting, objects, activity, activity_change, purged_objects, unlogged_ids, meta, object_original, object_origin).
+* Types come from `fs-types` v0.0.22 (draft rule R13: no second copy): `ObjectId`, `Revision`, `Utc`, `Date`, `LocalDateTime`, `Zone`, `Reference`, `PersonRef`, `Problem`. `uuid` shows only at the v4 edge (`v5::id::to_v4`, `from_v4`).
+* `v5::Error` (non-exhaustive: `NotFound`, `Invalid(Vec<Problem>)`, `Changed { current }`, `Unavailable`, `Schema`) is separate from the v4 `Error`.
+* A program registers a `Domain { prefix, about, tables, steps }`: one ordered list of steps (`Create` tables, one `Sql` statement, or `Code`), only forward, each step in its own transaction; the schema version is the number of applied steps; a store newer than the program is refused. `tests/v5_migrate.rs` walks the schema after every step and checks ADR 0086.
+* Whether an IANA zone exists is the program's knowledge (it has the zone database): the layer checks the form only, custom zones (`/...`) are refused.
+* Still in `fs-calendar-local`, lifted in L2: envelope (`bump`, trash, `untrash`), the typed log, original/origin functions, `FileStore`, purge scaffold. L3: the calendar switches to this layer.
+* MSRV: `fs-types` needs Rust 1.89, so the workspace `rust-version` is 1.89 (was 1.85).
