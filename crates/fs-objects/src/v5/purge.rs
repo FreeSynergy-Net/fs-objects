@@ -3,6 +3,8 @@
 //!
 //! Pattern: Template method (the scaffold walks the tables; the hook is the program's step).
 
+use fs_types::PersonRef;
+
 use super::codec::{Row, int};
 use super::conn::Conn;
 use super::envelope::{delete_final, due};
@@ -10,8 +12,10 @@ use super::error::Result;
 use super::migrate::StepFuture;
 use super::registry::Domain;
 
-/// A hook for one expired row (the key columns, in the order of `Expiry::key`); it runs before the row is deleted.
-pub type ExpiredFn = for<'a, 'c> fn(&'a Conn<'c>, &'a Row) -> StepFuture<'a>;
+/// A hook for one expired row (the key columns in the order of `Expiry::key`, the time of the run, the actor of the
+/// run); it runs before the row is deleted. A hook that changes rows of an object must carry the envelope along
+/// (`envelope::touch`): never leave a changed title in `objects.name`.
+pub type ExpiredFn = for<'a, 'c> fn(&'a Conn<'c>, &'a Row, i64, &'a PersonRef) -> StepFuture<'a>;
 
 /// A table with a deadline column.
 #[derive(Clone, Copy)]
@@ -40,7 +44,7 @@ pub struct Swept {
 ///
 /// # Errors
 /// The engine's error or the error of a hook.
-pub async fn sweep(c: &Conn<'_>, d: &Domain, now: i64) -> Result<Swept> {
+pub async fn sweep(c: &Conn<'_>, d: &Domain, now: i64, actor: &PersonRef) -> Result<Swept> {
     let mut out = Swept::default();
     for e in d.expiries {
         let cols = e.key.join(", ");
@@ -52,7 +56,7 @@ pub async fn sweep(c: &Conn<'_>, d: &Domain, now: i64) -> Result<Swept> {
             .await?;
         for row in &rows {
             if let Some(hook) = e.on_expired {
-                hook(c, row).await?;
+                hook(c, row, now, actor).await?;
             }
             let cond: Vec<String> = e.key.iter().map(|k| format!("{k} = ?")).collect();
             c.exec(

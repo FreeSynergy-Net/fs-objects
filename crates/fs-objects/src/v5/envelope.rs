@@ -6,7 +6,7 @@
 use fs_types::{ObjectId, PersonRef, Revision};
 use turso::Value;
 
-use super::codec::{get_int, get_opt_int, get_text, id_value, int, invalid, person_values, text};
+use super::codec::{get_int, get_opt_int, id_value, int, invalid, person_values, text};
 use super::conn::Conn;
 use super::error::{Error, Result};
 use super::registry::Domain;
@@ -145,6 +145,32 @@ pub async fn bump(
     }
 }
 
+/// A system run changed the object's data: `rev + 1` and `updated`, without an expected revision (no caller holds one),
+/// and the envelope follows the data (`name` and `name_sort` when given). Works on an object in the trash too (a period
+/// run scrubs what the trash held).
+///
+/// # Errors
+/// `NotFound` when there is no such row.
+pub async fn touch(c: &Conn<'_>, id: ObjectId, name: Option<&str>, now: i64) -> Result<Revision> {
+    let s = state(c, id).await?.ok_or(Error::NotFound(id))?;
+    if let Some(n) = name {
+        let sql =
+            "UPDATE objects SET rev = rev + 1, updated = ?, name = ?, name_sort = ? WHERE id = ?";
+        c.exec(
+            sql,
+            vec![int(now), text(n), text(&n.to_lowercase()), id_value(id)],
+        )
+        .await?;
+    } else {
+        c.exec(
+            "UPDATE objects SET rev = rev + 1, updated = ? WHERE id = ?",
+            vec![int(now), id_value(id)],
+        )
+        .await?;
+    }
+    Ok(Revision(s.rev + 1))
+}
+
 /// The trash period in days: `setting.trash_days`, else 30 (draft section 3).
 ///
 /// # Errors
@@ -223,27 +249,35 @@ pub async fn delete_final(c: &Conn<'_>, d: &Domain, id: ObjectId) -> Result<()> 
     if s.deleted.is_none() {
         return Err(invalid("id", "not in the trash"));
     }
-    for ch in d.children {
-        let sql = format!(
-            "SELECT {} FROM {} WHERE {} = ?",
-            ch.object, ch.table, ch.parent
-        );
-        for r in c.query(&sql, vec![id_value(id)]).await? {
+    // The dependents, then theirs, until nothing new turns up (a task with subtasks); every one leaves with its marks.
+    let mut all = vec![id];
+    let mut at = 0;
+    while at < all.len() {
+        let parent = all[at];
+        at += 1;
+        for ch in d.children {
+            let sql = format!(
+                "SELECT {} FROM {} WHERE {} = ?",
+                ch.object, ch.table, ch.parent
+            );
+            for r in c.query(&sql, vec![id_value(parent)]).await? {
+                let found = super::codec::get_id(&r, 0)?;
+                if !all.contains(&found) {
+                    all.push(found);
+                }
+            }
+        }
+    }
+    for gone in all.iter().rev() {
+        c.exec("DELETE FROM objects WHERE id = ?", vec![id_value(*gone)])
+            .await?;
+        for t in ["purged_objects", "unlogged_ids"] {
             c.exec(
-                "DELETE FROM objects WHERE id = ?",
-                vec![Value::Text(get_text(&r, 0)?)],
+                &format!("DELETE FROM {t} WHERE object_id = ?"),
+                vec![id_value(*gone)],
             )
             .await?;
         }
-    }
-    c.exec("DELETE FROM objects WHERE id = ?", vec![id_value(id)])
-        .await?;
-    for t in ["purged_objects", "unlogged_ids"] {
-        c.exec(
-            &format!("DELETE FROM {t} WHERE object_id = ?"),
-            vec![id_value(id)],
-        )
-        .await?;
     }
     Ok(())
 }

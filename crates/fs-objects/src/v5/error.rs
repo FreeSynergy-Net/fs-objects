@@ -33,6 +33,14 @@ pub enum Error {
         /// The number of the step, from 1.
         step: usize,
     },
+    /// A store file belongs to one program: a second program domain is refused (the shared `fs_` base does not count).
+    #[error("{existing} is registered in this store, {new} cannot join it")]
+    SecondDomain {
+        /// The domain that is already there.
+        existing: String,
+        /// The domain that was refused.
+        new: String,
+    },
     /// A schema step or a registration failed; the store is as it was before that step.
     #[error("schema: {0}")]
     Schema(String),

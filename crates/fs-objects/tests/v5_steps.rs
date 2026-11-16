@@ -235,51 +235,29 @@ const LOG: Table = Table {
 };
 
 #[tokio::test]
-async fn json_in_a_text_column_is_found_by_content() {
+async fn json_in_a_text_column_is_found_by_the_check_a_program_runs_in_its_step_test() {
     let s = Store::open(":memory:", 0).await.unwrap();
     let steps: &'static [Step] = &[Step::Create(&[LOG]), Step::Code("json_into", json_into)];
-    let r = s
-        .register_domain(
-            &Domain {
-                tables: &[LOG],
-                steps,
-                ..DOMAIN
-            },
-            1,
-        )
-        .await;
-    assert!(
-        matches!(&r, Err(Error::Invalid(p)) if p[0].field == "demo_log.data"),
-        "{r:?}"
-    );
+    let d = Domain {
+        tables: &[LOG],
+        steps,
+        ..DOMAIN
+    };
+    s.register_domain(&d, 1).await.unwrap();
     assert_eq!(
         count(&s, "SELECT 1 FROM demo_log").await,
-        0,
-        "the step rolled back, step 1 stays"
+        1,
+        "the registry does not look at content"
     );
-
-    let ok: &'static [Step] = &[Step::Create(&[LOG])];
-    s.register_domain(
-        &Domain {
-            tables: &[LOG],
-            steps: ok,
-            ..DOMAIN
-        },
-        2,
-    )
-    .await
-    .unwrap();
-    let c = s.begin().await.unwrap();
-    c.run("INSERT INTO demo_log (id, data) VALUES ('01927f00-0000-7000-8000-000000000003', '[\"x\"]')").await.unwrap();
-    c.run("INSERT INTO demo_log (id, data) VALUES ('01927f00-0000-7000-8000-000000000004', '[Draft] a note')").await.unwrap();
+    let c = s.read().await;
+    let found = schema::json_in_text(&c, &[LOG]).await;
     assert!(
-        schema::json_in_text(&c, &[LOG]).await.is_err(),
-        "an array that parses is JSON; '[Draft] a note' alone is not"
+        matches!(&found, Err(Error::Invalid(p)) if p[0].field == "demo_log.data"),
+        "{found:?}"
     );
-    c.finish(Err::<(), _>(Error::Unavailable("undo".into())))
-        .await
-        .unwrap_err();
+    drop(c);
     let c = s.begin().await.unwrap();
+    c.run("DELETE FROM demo_log").await.unwrap();
     c.run("INSERT INTO demo_log (id, data) VALUES ('01927f00-0000-7000-8000-000000000004', '[Draft] a note')").await.unwrap();
     schema::json_in_text(&c, &[LOG]).await.unwrap();
     c.finish(Ok(())).await.unwrap();

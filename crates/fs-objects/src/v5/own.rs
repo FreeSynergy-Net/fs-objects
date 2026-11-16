@@ -66,7 +66,14 @@ const OWN_TABLES: [Table; N_OWN] = {
     t[i + 2] = FS_STEP;
     t
 };
-const OWN_STEPS: [Step; 1] = [Step::Create(&OWN_TABLES)];
+const OWN_STEPS: [Step; 2] = [
+    Step::Create(&OWN_TABLES),
+    // ADR 0030: the original is never rewritten (only the final delete of the object removes it, by cascade).
+    Step::Sql(
+        "CREATE TRIGGER object_original_immutable BEFORE UPDATE ON object_original \
+         BEGIN SELECT RAISE(ABORT, 'the original is immutable'); END",
+    ),
+];
 pub(super) const OWN_DOMAIN: Domain = Domain {
     prefix: super::registry::OWN,
     about: "tables of the store itself",

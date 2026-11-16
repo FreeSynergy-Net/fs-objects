@@ -60,8 +60,15 @@ fn is_invalid<T>(r: &Result<T, Error>, field: &str) -> bool {
 async fn r1_two_domains_idempotent_and_clashes_refused() {
     let s = Store::open(":memory:", 0).await.unwrap();
     s.register_domain(&TASKS, 5).await.unwrap();
-    s.register_domain(&SHOP, 5).await.unwrap();
     s.register_domain(&TASKS, 6).await.unwrap();
+    let second = s.register_domain(&SHOP, 5).await;
+    assert_eq!(
+        second,
+        Err(Error::SecondDomain {
+            existing: "tasks".into(),
+            new: "shop".into()
+        })
+    );
     let c = s.read().await;
     let doms = c
         .query(
@@ -70,9 +77,9 @@ async fn r1_two_domains_idempotent_and_clashes_refused() {
         )
         .await
         .unwrap();
-    assert_eq!(doms.len(), 3, "fs_, shop, tasks");
+    assert_eq!(doms.len(), 2, "fs_ and tasks");
     assert_eq!(
-        doms[2],
+        doms[1],
         vec![Value::Text("tasks".into()), Value::Integer(1)]
     );
     let cols = c

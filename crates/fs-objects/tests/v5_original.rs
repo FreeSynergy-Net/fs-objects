@@ -116,3 +116,21 @@ async fn the_memory_file_store_checks_the_checksum() {
     absent.iri = Reference::parse("urn:sha256:00").unwrap();
     assert!(matches!(f.read(&absent).await, Err(Error::Unavailable(_))));
 }
+
+#[tokio::test]
+async fn the_original_cannot_be_rewritten_even_by_a_plain_update() {
+    let s = store(&[]).await;
+    let (d, o) = (domain(&[]), id(T0));
+    let c = s.begin().await.unwrap();
+    insert(&c, o, "Note", "n", &actor(), T0).await.unwrap();
+    record(&c, &d, o, &origin("import", Some(b"a")), Revision(1), T0)
+        .await
+        .unwrap();
+    c.finish(Ok(())).await.unwrap();
+    let c = s.begin().await.unwrap();
+    let r = c
+        .exec("UPDATE object_original SET media_type = 'x/y'", Vec::new())
+        .await;
+    assert!(r.is_err(), "the trigger refuses: {r:?}");
+    c.finish(r).await.unwrap_err();
+}

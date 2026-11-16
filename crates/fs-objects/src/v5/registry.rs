@@ -87,6 +87,20 @@ pub(super) async fn register(store: &Store, d: &Domain, now: i64) -> Result<()> 
     if d.steps.is_empty() {
         return Err(invalid("steps", "a domain needs at least one step"));
     }
+    let other = store
+        .read()
+        .await
+        .query(
+            "SELECT prefix FROM fs_domain WHERE prefix NOT IN (?, ?) ORDER BY prefix",
+            vec![text(OWN), text(d.prefix)],
+        )
+        .await?;
+    if let Some(row) = other.first() {
+        return Err(Error::SecondDomain {
+            existing: get_text(row, 0)?,
+            new: d.prefix.to_owned(),
+        });
+    }
     run(store, d, now).await
 }
 
@@ -102,7 +116,7 @@ async fn run(store: &Store, d: &Domain, now: i64) -> Result<()> {
     check_prints(&store.read().await, d, have).await?;
     for (i, step) in d.steps.iter().enumerate().skip(have) {
         let c = store.begin().await?;
-        let r = apply(&c, d, i, step, have == 0, now).await;
+        let r = apply(&c, d, i, step, now).await;
         c.finish(r).await?;
     }
     if have == d.steps.len() {
@@ -175,14 +189,7 @@ async fn check_prints(c: &Conn<'_>, d: &Domain, have: usize) -> Result<()> {
     Ok(())
 }
 
-async fn apply(
-    c: &Conn<'_>,
-    d: &Domain,
-    i: usize,
-    step: &Step,
-    fresh: bool,
-    now: i64,
-) -> Result<()> {
+async fn apply(c: &Conn<'_>, d: &Domain, i: usize, step: &Step, now: i64) -> Result<()> {
     // Read again inside the transaction: another registration may have applied this step since we looked.
     let now_at = version(c, d.prefix).await?;
     if now_at > i {
@@ -215,9 +222,6 @@ async fn apply(
     if i + 1 == d.steps.len() {
         record_columns(c, d).await?;
         schema::check_structure(c, d.tables).await?;
-        if fresh {
-            schema::json_in_text(c, d.tables).await?;
-        }
     }
     Ok(())
 }

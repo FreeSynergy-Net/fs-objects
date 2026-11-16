@@ -62,16 +62,14 @@ pub async fn check_structure(c: &Conn<'_>, tables: &[Table]) -> Result<()> {
             if ty == "BLOB" && !blob_allowed(t, col.name) {
                 return Err(invalid(&field, "a blob outside object_original.bytes"));
             }
-            if ty.contains("JSON") {
-                return Err(invalid(&field, "a JSON column"));
-            }
         }
     }
     Ok(())
 }
 
 /// Look for JSON in the text columns of the tables (an object or array that parses): what a migration step must not
-/// leave behind. A heuristic (draft R14): it looks at the first rows that start with `{` or `[`.
+/// leave behind. A heuristic (draft R14), NOT run by the registry (a user title like `[1, 2]` would block a migration):
+/// every code step of a program has a test in the program's repo that runs it on fixture data and then this check.
 ///
 /// # Errors
 /// `Invalid` naming `table.column`.
