@@ -7,11 +7,13 @@ use turso::Value;
 
 use super::codec::{get_int, get_text, int, invalid, text};
 use super::conn::Conn;
+pub use super::envelope::Child;
 use super::error::{Error, Result};
 use super::id::new_id;
 use super::migrate::Step;
 use super::own::OWN_DOMAIN;
 pub use super::own::{FS_COLUMN, FS_DOMAIN, FS_STEP};
+use super::purge::Expiry;
 use super::schema;
 use super::spec::Table;
 use super::store::Store;
@@ -32,6 +34,10 @@ pub struct Domain {
     pub tables: &'static [Table],
     /// The channel names `object_origin.channel` may hold for this program (general names, see `COMMON_CHANNELS`).
     pub channels: &'static [&'static str],
+    /// Dependent objects whose envelopes go with the object at the final delete (e.g. the exceptions of a series).
+    pub children: &'static [Child],
+    /// Tables with deadlines the period run removes (`purge::sweep`).
+    pub expiries: &'static [Expiry],
     /// The ordered steps; the schema version is their number, only forward, only appended.
     pub steps: &'static [Step],
 }

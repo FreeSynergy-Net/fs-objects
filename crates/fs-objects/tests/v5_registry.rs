@@ -1,5 +1,6 @@
 //! R1 (a program registers a domain with schema version and steps) and R2 (column types are checked on write).
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 use fs_objects::v5::spec::Logical::{
     Bool, Date, Enum, Int, Iri, Local, Real, Ref, Text, Utc, Zone,
@@ -31,6 +32,8 @@ const TASKS: Domain = Domain {
     about: "tasks",
     tables: &[ONE],
     channels: &[],
+    children: &[],
+    expiries: &[],
     steps: &[Step::Create(&[ONE])],
 };
 const SHOP: Domain = Domain {
@@ -38,6 +41,8 @@ const SHOP: Domain = Domain {
     about: "shop",
     tables: &[OTHER_SHOP],
     channels: &[],
+    children: &[],
+    expiries: &[],
     steps: &[Step::Create(&[OTHER_SHOP])],
 };
 const OTHER_SHOP: Table = Table {
@@ -101,6 +106,8 @@ async fn r1_two_domains_idempotent_and_clashes_refused() {
         prefix: "shop2",
         tables: &[OUTSIDE],
         channels: &[],
+        children: &[],
+        expiries: &[],
         steps: &[Step::Create(&[OUTSIDE])],
         ..SHOP
     };
@@ -152,6 +159,8 @@ const TYPED_DOMAIN: Domain = Domain {
     about: "t",
     tables: &[TYPED],
     channels: &[],
+    children: &[],
+    expiries: &[],
     steps: &[Step::Create(&[TYPED])],
 };
 const ID: &str = "01927f00-0000-7000-8000-000000000001";

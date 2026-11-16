@@ -72,5 +72,7 @@ pub(super) const OWN_DOMAIN: Domain = Domain {
     about: "tables of the store itself",
     tables: &OWN_TABLES,
     channels: &[],
+    children: &[],
+    expiries: &[],
     steps: &OWN_STEPS,
 };

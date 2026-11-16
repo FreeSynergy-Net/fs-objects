@@ -1,6 +1,7 @@
 //! Migration steps: ordered, forward only, each transactional; after every step the schema keeps ADR 0086
 //! (`STRICT`, foreign keys on parent columns, no JSON column, a blob only as `object_original.bytes`).
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 use fs_objects::v5::migrate::StepFuture;
 use fs_objects::v5::spec::Logical::{Ref, Text, Utc};
@@ -62,6 +63,8 @@ fn domain(n: usize) -> Domain {
         about: "demo",
         tables,
         channels: &[],
+        children: &[],
+        expiries: &[],
         steps: &STEPS[..n],
     }
 }
@@ -179,6 +182,8 @@ async fn a_failing_step_changes_nothing_and_an_older_program_is_refused() {
         about: "demo",
         tables: &[ITEM_V1],
         channels: &[],
+        children: &[],
+        expiries: &[],
         steps: &BAD,
     };
     let r = s.register_domain(&bad, 1).await;

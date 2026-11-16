@@ -1,5 +1,6 @@
 //! Steps are applied once, roll back as a whole, are fingerprinted, and the real tables are checked (ADR 0086).
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -50,6 +51,8 @@ const DOMAIN: Domain = Domain {
     about: "demo",
     tables: &[ITEM, COPY],
     channels: &[],
+    children: &[],
+    expiries: &[],
     steps: &STEPS,
 };
 
