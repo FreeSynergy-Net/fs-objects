@@ -11,6 +11,7 @@ pub mod conn;
 pub mod error;
 pub mod id;
 pub mod migrate;
+pub mod own;
 pub mod registry;
 pub mod schema;
 pub mod spec;
