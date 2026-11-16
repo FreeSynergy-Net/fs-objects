@@ -9,10 +9,13 @@ use fs_objects::v5::envelope::insert;
 use fs_objects::v5::log::{Kind, log};
 use fs_objects::v5::own::steps;
 use fs_objects::v5::tables::{ACTIVITY, ACTIVITY_CHANGE};
-use fs_objects::v5::tables_kind::{ACTIVITY_KINDS, rebuild_activity};
+use fs_objects::v5::tables_kind::{ACTIVITY_KINDS, WORDS_AS2, rebuild_activity};
 use fs_objects::v5::{Step, Store};
 
 const T0: i64 = 1_794_823_200_000;
+const ORPHANS: &str = "SELECT name FROM sqlite_schema WHERE type='index' AND sql IS NULL \
+    AND name NOT LIKE 'sqlite_autoindex_' || tbl_name || '_%'";
+
 const AS2: [Kind; 5] = [Kind::Add, Kind::Remove, Kind::Join, Kind::Leave, Kind::Move];
 
 #[test]
@@ -54,7 +57,7 @@ async fn every_kind_is_written_and_read_back_and_the_word_table_is_filled() {
             .unwrap();
     }
     c.finish(Ok(())).await.unwrap();
-    assert_eq!(count(&s, "activity_word").await, 13);
+    assert_eq!(count(&s, "fs_word").await, 13);
     let r = s.read().await;
     let rows = r
         .query("SELECT kind FROM activity ORDER BY id", Vec::new())
@@ -119,4 +122,79 @@ async fn an_older_log_survives_the_rebuild_of_step_seven() {
         1
     );
     c.finish(Ok(())).await.unwrap();
+}
+
+#[tokio::test]
+async fn every_autoindex_belongs_to_its_table_fresh_and_after_the_rebuild() {
+    let s = store(&[]).await;
+    assert_eq!(
+        s.read()
+            .await
+            .query(ORPHANS, Vec::new())
+            .await
+            .unwrap()
+            .len(),
+        0
+    );
+    let c = s.begin().await.unwrap();
+    c.run("DROP TABLE activity_change").await.unwrap();
+    c.run("DROP TABLE activity").await.unwrap();
+    c.run(&ACTIVITY.ddl()).await.unwrap();
+    c.run(&ACTIVITY_CHANGE.ddl()).await.unwrap();
+    rebuild_activity(&c).await.unwrap();
+    assert_eq!(c.query(ORPHANS, Vec::new()).await.unwrap().len(), 0);
+    c.finish(Ok(())).await.unwrap();
+}
+
+#[tokio::test]
+async fn the_insert_step_turns_an_own_word_of_the_same_name_into_a_builtin() {
+    let s = store(&[]).await;
+    let c = s.begin().await.unwrap();
+    c.run("UPDATE fs_word SET builtin = 0 WHERE code = 'Join'")
+        .await
+        .unwrap();
+    c.run(WORDS_AS2).await.unwrap();
+    let r = c
+        .query(
+            "SELECT builtin FROM fs_word WHERE code = 'Join'",
+            Vec::new(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(fs_objects::v5::codec::get_int(&r[0], 0).unwrap(), 1);
+    c.finish(Ok(())).await.unwrap();
+}
+
+/// General rule (DESIGN.md): after all steps a store file is readable by standard SQLite (`python3 -I`), with no
+/// orphan autoindex. Skipped, and said so, when `python3` or its `sqlite3` module is missing.
+#[tokio::test]
+async fn standard_sqlite_reads_the_store_file() {
+    let dir = std::env::temp_dir().join(format!("fs-objects-kinds-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let file = dir.join("store.db");
+    {
+        let s = Store::open(file.to_str().unwrap(), 0).await.unwrap();
+        let c = s.begin().await.unwrap();
+        let o = id(T0);
+        insert(&c, o, "Note", "n", &actor(), T0).await.unwrap();
+        log(&c, o, Kind::Join, &actor(), T0, &[]).await.unwrap();
+        c.finish(Ok(())).await.unwrap();
+    }
+    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/sqlite_check.py");
+    match std::process::Command::new("python3")
+        .args(["-I", script])
+        .arg(&file)
+        .output()
+    {
+        Ok(o) if o.status.success() => {}
+        Ok(o) if String::from_utf8_lossy(&o.stderr).contains("No module named") => {
+            eprintln!("SKIPPED: python3 has no sqlite3 module");
+        }
+        Ok(o) => panic!(
+            "standard SQLite refuses the file: {}",
+            String::from_utf8_lossy(&o.stderr)
+        ),
+        Err(e) => eprintln!("SKIPPED: python3 not available ({e})"),
+    }
+    std::fs::remove_dir_all(&dir).unwrap();
 }
