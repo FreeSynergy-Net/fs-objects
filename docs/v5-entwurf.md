@@ -282,7 +282,7 @@ cargo target tmp dir). The probes pin today's behaviour; a flip means this secti
 
 ## 8a. Material for the ADR 0086 addendum
 
-Points that the draft wants decided in the ADR addendum (no ADR of its own now): (1) the **trash period**: default 30 days, per program, set by the person (ADR 0042), stored as the typed setting `trash_days`, valid only for later deletes; (2) the three operations trash / log purge / final delete (R4); (3) `REAL` never holds NaN or infinity; (4) `sha256` is lower-case hex text.
+Points that the draft wants decided in the ADR addendum (no ADR of its own now): (1) the **trash period**: default 30 days, per store file, set by the person (ADR 0042), stored as the typed setting `trash_days`, valid only for later deletes; (2) the three operations trash / log purge / final delete (R4); (3) `REAL` never holds NaN or infinity; (4) `sha256` is lower-case hex text.
 
 Note on test quality (k6): in `v5_probe_delete.rs` the history is restored between the REPLACE and the plain `DELETE` + `INSERT`, so each statement is proved on its own.
 
