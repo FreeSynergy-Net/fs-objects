@@ -10,8 +10,7 @@ use common_v5::{actor, count, domain, id, store};
 use fs_objects::v5::codec::{get_text, id_value, int, text};
 use fs_objects::v5::envelope::{insert, touch, trash};
 use fs_objects::v5::log::{mark_unlogged, purge_log};
-use fs_objects::v5::migrate::StepFuture;
-use fs_objects::v5::purge::{Swept, sweep};
+use fs_objects::v5::purge::{HookFuture, Swept, sweep};
 use fs_objects::v5::{Conn, Expiry};
 use fs_types::{PersonRef, Revision};
 
@@ -24,7 +23,7 @@ fn forget_note<'a>(
     key: &'a Vec<turso::Value>,
     _now: i64,
     _actor: &'a PersonRef,
-) -> StepFuture<'a> {
+) -> HookFuture<'a> {
     Box::pin(async move {
         HOOKED.fetch_add(1, Ordering::SeqCst);
         c.exec(
@@ -32,7 +31,7 @@ fn forget_note<'a>(
             vec![text(&get_text(key, 0)?)],
         )
         .await
-        .map(|_| ())
+        .map(|n| ("notes", usize::try_from(n).unwrap_or(0)))
     })
 }
 
@@ -81,6 +80,7 @@ async fn due_rows_go_with_their_hook_and_objects_after_the_trash_period() {
         early,
         Swept {
             objects: 0,
+            changed: vec![("notes", 1)],
             rows: vec![("demo_cut", 1)]
         }
     );
@@ -99,6 +99,7 @@ async fn due_rows_go_with_their_hook_and_objects_after_the_trash_period() {
         late,
         Swept {
             objects: 1,
+            changed: vec![("notes", 1)],
             rows: vec![("demo_cut", 1)]
         }
     );
@@ -117,7 +118,7 @@ fn scrub_title<'a>(
     key: &'a Vec<turso::Value>,
     now: i64,
     actor: &'a PersonRef,
-) -> StepFuture<'a> {
+) -> HookFuture<'a> {
     Box::pin(async move {
         let object = get_text(key, 0)?;
         let rows = c
@@ -134,7 +135,7 @@ fn scrub_title<'a>(
             vec![text(&object)],
         )
         .await?;
-        touch(c, obj, Some(&old), now).await.map(|_| ())
+        touch(c, obj, Some(&old), now).await.map(|_| ("titles", 1))
     })
 }
 
@@ -168,9 +169,14 @@ async fn a_hook_carries_the_envelope_along_and_leaves_no_changed_title_behind() 
     .await;
     c.finish(r).await.unwrap();
     let c = s.begin().await.unwrap();
-    sweep(&c, &domain(SCRUB), T0 + 2 * DAY, &actor())
+    let done = sweep(&c, &domain(SCRUB), T0 + 2 * DAY, &actor())
         .await
         .unwrap();
+    assert_eq!(
+        done.changed_of("titles"),
+        1,
+        "the count is what the hook reports"
+    );
     c.finish(Ok(())).await.unwrap();
     let rows = s
         .read()
