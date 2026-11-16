@@ -12,6 +12,7 @@
 pub mod codec;
 pub mod conn;
 pub mod envelope;
+pub mod envelope_trash;
 pub mod error;
 pub mod files;
 pub mod id;
@@ -22,6 +23,7 @@ pub mod original;
 pub mod own;
 pub mod purge;
 pub mod registry;
+pub mod registry_rows;
 pub mod schema;
 pub mod spec;
 pub mod store;
