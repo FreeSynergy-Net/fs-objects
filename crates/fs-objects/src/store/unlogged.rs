@@ -2,7 +2,7 @@
 //!
 //! Pattern: Repository (a separate narrow trait, interface segregation) — it is deliberately not part
 //! of the [`Store`](crate::Store) facade, so nobody reaches it by accident, and existing backends need
-//! not implement it. Written for anonymous ballots in `fs-surveys`.
+//! not implement it. Written for anonymous ballots in `fs-forms`.
 
 use async_trait::async_trait;
 

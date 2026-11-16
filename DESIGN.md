@@ -42,8 +42,8 @@ seven is a `Store` (blanket impl). Every file is one concept, <= 200 lines (test
 
 ## Migration for dependents
 
-None required: `Store`, `TursoStore`, `Query`, ... keep their paths and signatures; fs-contacts, fs-calendar, fs-maps
-and fs-hub compile unchanged. New: the focused traits in `fs_objects::traits`. Do not import `Store` and a focused trait
+None required: `Store`, `TursoStore`, `Query`, ... keep their paths and signatures; fs-contacts, fs-calendars, fs-maps
+and fs-registry compile unchanged. New: the focused traits in `fs_objects::traits`. Do not import `Store` and a focused trait
 for the same concrete type in one scope (calls become ambiguous); use `dyn ObjectQuery` etc. for narrow dependencies.
 
 ## State
@@ -68,8 +68,8 @@ Version 0.4.0 (schema version 4).
 | Retention (`max_age`, `max_steps`), `compact()`, `clear_history()`, `mark_synced()` | done |
 | Encryption at rest | done via `KeyProvider` + Turso page encryption (experimental in Turso); no key vault yet |
 | Sensitive data (ADR 0029) | envelope carries DPV categories; unencrypted store refuses sensitive objects unless opted out. No auto-link logic here (hub concern) |
-| Hub sync | only the data side: `activities(unsynced_only / after)` + `mark_synced`. No IPC (belongs to fs-hub) |
-| `UnloggedObjects` (0.3): `put_unlogged`, `read_unlogged`, `delete_unlogged`: no activity at any moment, no event, no undo, times as given. A separate trait, not part of `Store`; for anonymous ballots (`fs-surveys`). Old pages can stay on disk until reused. **0.4: the logged calls (`put`, `put_and_log`, `delete`, `get`, `query`, `log`) refuse an id written through it** (`Error::Invalid`, table `unlogged_ids`, kept after a delete) **0.6: `query_unlogged(&Query, types)`: searches marked objects of the given types only (types must not be empty); `query` still refuses.** | done |
+| Hub sync | only the data side: `activities(unsynced_only / after)` + `mark_synced`. No IPC (belongs to fs-registry) |
+| `UnloggedObjects` (0.3): `put_unlogged`, `read_unlogged`, `delete_unlogged`: no activity at any moment, no event, no undo, times as given. A separate trait, not part of `Store`; for anonymous ballots (`fs-forms`). Old pages can stay on disk until reused. **0.4: the logged calls (`put`, `put_and_log`, `delete`, `get`, `query`, `log`) refuse an id written through it** (`Error::Invalid`, table `unlogged_ids`, kept after a delete) **0.6: `query_unlogged(&Query, types)`: searches marked objects of the given types only (types must not be empty); `query` still refuses.** | done |
 | Log purge (0.4) | done, see "Log purge of one object" |
 | Identity and `is_encrypted` (0.4) | done: `StoreInfo`, `StoreId`, schema version 4 |
 | Large originals (0.4) | **draft, `Unsupported`**: trait `LargeOriginals` + 4 ignored target tests, see below |
@@ -194,11 +194,11 @@ multi-process mode is experimental and not used: one process owns one database f
 
 ## Log purge of one object (ADR 0029, 0.4)
 
-> **Lock (strategy decision, 2026-11-07), now met by `fs-hub` v0.3.0:** no program calls `purge_object` directly; use
-> `sync_then_purge` of `fs-hub-client` (fs-hub v0.3.0). A purge before the sync deletes the unsynced mark entry
+> **Lock (strategy decision, 2026-11-07), now met by `fs-registry` v0.3.0:** no program calls `purge_object` directly; use
+> `sync_then_purge` of `fs-registry-client` (fs-registry v0.3.0). A purge before the sync deletes the unsynced mark entry
 > (`PurgeReport.unsynced_removed > 0`) and leaves the hub with the unmarked copy (ADR 0029). Hub and client skip
 > `payload.redacted == true` (`Activity::is_redacted()`) and are tested against a real `purge_object`
-> (`fs-hub-e2e/tests/purge.rs`, `purge_mark.rs`, `purge_sync.rs`). A mark can be lifted after a purge by the owner and
+> (`fs-registry-e2e/tests/purge.rs`, `purge_mark.rs`, `purge_sync.rs`). A mark can be lifted after a purge by the owner and
 > the marking program only.
 
 `HistoryRetention::purge_object(id) -> PurgeReport` removes **every** log entry of the object (`Create`, `Update`, `Delete`,
@@ -230,11 +230,11 @@ implementations compile; these defaults are **not tested** (a test needs a stand
 
   | Place | What to do |
   |---|---|
-  | `fs-hub core/apply.rs:35` (and `:56`) | `if a.is_redacted()`: skip, fetch the copy; never `after == None` => delete |
-  | `fs-hub-client sync/apply.rs:23` (and `:33`) | the same |
-  | `fs-hub server/subscription.rs:68` | report `updated` (or skip); never `deleted` |
-  | `fs-hub core/visibility.rs:25` | the type of a redacted entry is unknown (`None`): decide what the filter does |
-  | `fs-hub-proto convert/activity.rs:17` | not critical (payload is passed on as JSON) |
+  | `fs-registry core/apply.rs:35` (and `:56`) | `if a.is_redacted()`: skip, fetch the copy; never `after == None` => delete |
+  | `fs-registry-client sync/apply.rs:23` (and `:33`) | the same |
+  | `fs-registry server/subscription.rs:68` | report `updated` (or skip); never `deleted` |
+  | `fs-registry core/visibility.rs:25` | the type of a redacted entry is unknown (`None`): decide what the filter does |
+  | `fs-registry-proto convert/activity.rs:17` | not critical (payload is passed on as JSON) |
 
 * **Ids:** the highest activity id ever issued is kept in `meta.activity_high` (written by purge and compaction); the last id
   after a reopen is the larger of log maximum and that mark, so `ActivityId::next_after` stays above what the hub accepted.
@@ -248,7 +248,7 @@ activity log and not changeable by the API. A copy of the whole file set (databa
 store gets its own (tested, also that a migration makes exactly one). It is no secret but makes the server
 recognisable: it must not go to the hub, into objects or into content unless someone decided that. Use: detect two
 handles to the same store, and let programs check `is_encrypted()` (ADR 0018). Custom backends of the focused traits must
-now also implement `StoreInfo` to be a `Store`; the same holds for a direct `impl Store` (a break in `fs-messenger`
+now also implement `StoreInfo` to be a `Store`; the same holds for a direct `impl Store` (a break in `fs-messages`
 `tests/report_write_fails.rs`).
 
 **Copies.** Copy the database **with** its `-wal` file, or only after the store is closed or `clean_files()` ran: the `.db` alone
@@ -280,12 +280,12 @@ threads; it fails with "database is locked" without the retry).
 
 ## After the sprint (strategy list, 2026-11-07)
 
-* Exact index search is O(n) (2,6 ms at 100 texts, 5,5 ms at 400, measured through fs-wiki) and `order_by_index` sorts all candidates before it cuts: pages stay linear in the rows read but cost O(rest) in the database. Measure again on 0.4 before anybody optimises.
-* `purge_object`: callers use `sync_then_purge` of `fs-hub-client` (see the lock above).
+* Exact index search is O(n) (2,6 ms at 100 texts, 5,5 ms at 400, measured through fs-texts) and `order_by_index` sorts all candidates before it cuts: pages stay linear in the rows read but cost O(rest) in the database. Measure again on 0.4 before anybody optimises.
+* `purge_object`: callers use `sync_then_purge` of `fs-registry-client` (see the lock above).
 
 ## Schema v5 (draft)
 
-* `docs/v5-entwurf.md` (2026-11-16, draft, no code): typed tables instead of JSON `content` (ADR 0086), the requirement list of the first user (fs-calendar) and the second (fs-tasks), the migration sketch v4 -> v5, and what the embedded engine can do (`tests/v5_probe.rs`). The reviewed draft is built step by step in `src/v5/` (see below).
+* `docs/v5-entwurf.md` (2026-11-16, draft, no code): typed tables instead of JSON `content` (ADR 0086), the requirement list of the first user (fs-calendars) and the second (fs-tasks), the migration sketch v4 -> v5, and what the embedded engine can do (`tests/v5_probe.rs`). The reviewed draft is built step by step in `src/v5/` (see below).
 
 ### v5 layer, step L1 (state v0.0.3; the tag follows through the strategy; feature `v5` is off by default)
 
