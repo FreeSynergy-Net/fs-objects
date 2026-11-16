@@ -14,7 +14,8 @@ use super::envelope::state;
 use super::error::{Error, Result};
 use super::id::new_id;
 use super::log_codec::{LogValue, decode, encode};
-use super::tables::{ACTIVITY, ACTIVITY_CHANGE, KINDS};
+use super::tables::ACTIVITY_CHANGE;
+use super::tables_kind::{ACTIVITY_KINDS, ACTIVITY_V2, SET};
 
 /// The kind of an activity (AS2 names).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,9 +36,19 @@ pub enum Kind {
     TentativeAccept,
     /// Declined.
     Reject,
+    /// Something was added to a collection (v0.0.5).
+    Add,
+    /// Something was taken out of a collection (v0.0.5).
+    Remove,
+    /// A person joined (v0.0.5).
+    Join,
+    /// A person left (v0.0.5).
+    Leave,
+    /// Something was moved (v0.0.5).
+    Move,
 }
 
-const ALL: [Kind; 8] = [
+const ALL: [Kind; 13] = [
     Kind::Create,
     Kind::Update,
     Kind::Delete,
@@ -46,13 +57,18 @@ const ALL: [Kind; 8] = [
     Kind::Accept,
     Kind::TentativeAccept,
     Kind::Reject,
+    Kind::Add,
+    Kind::Remove,
+    Kind::Join,
+    Kind::Leave,
+    Kind::Move,
 ];
 
 impl Kind {
     /// The stored word (`activity.kind`).
     #[must_use]
     pub fn word(self) -> &'static str {
-        KINDS[ALL.iter().position(|k| *k == self).unwrap_or(0)]
+        ACTIVITY_KINDS[ALL.iter().position(|k| *k == self).unwrap_or(0)]
     }
 
     /// The kind of a stored word.
@@ -60,7 +76,7 @@ impl Kind {
     /// # Errors
     /// `Unavailable` for a word that is none (a damaged row).
     pub fn from_word(w: &str) -> Result<Self> {
-        KINDS
+        ACTIVITY_KINDS
             .iter()
             .position(|k| *k == w)
             .map(|i| ALL[i])
@@ -116,8 +132,9 @@ pub async fn log(
         int(0),
         int(0),
         int(1),
+        text(SET),
     ];
-    c.insert(&ACTIVITY, row).await?;
+    c.insert(&ACTIVITY_V2, row).await?;
     for (seq, ch) in changes.iter().enumerate() {
         let (ko, old) = encode(ch.old.as_ref())?;
         let (kn, new) = encode(ch.new.as_ref())?;

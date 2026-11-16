@@ -243,8 +243,8 @@ async fn the_hold_goes_with_the_object_and_the_store_has_the_appended_step_with_
     let prints: Vec<String> = rows.iter().map(|r| get_text(r, 0).unwrap()).collect();
     assert_eq!(
         prints.len(),
-        3,
-        "v0.0.2 had two steps, the hold is the third"
+        7,
+        "v0.0.2 had two steps, the hold is the third, v0.0.5 appends four (activity kinds)"
     );
     assert_eq!(prints[0], FIRST_PRINT_V002, "step 1 is unchanged");
     assert_eq!(prints[1], SECOND_PRINT_V002, "step 2 is unchanged");

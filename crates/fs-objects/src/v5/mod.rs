@@ -29,6 +29,7 @@ pub mod schema;
 pub mod spec;
 pub mod store;
 pub mod tables;
+pub mod tables_kind;
 pub mod tables_more;
 pub mod typed;
 
