@@ -33,10 +33,10 @@ impl TursoStore {
             // Highest id that is outside retention; everything up to it is eligible (a prefix).
             let mut cut: Option<String> = None;
             let mut bump = |cand: Option<String>| {
-                if let Some(x) = cand {
-                    if cut.as_ref().is_none_or(|c| x > *c) {
-                        cut = Some(x);
-                    }
+                if let Some(x) = cand
+                    && cut.as_ref().is_none_or(|c| x > *c)
+                {
+                    cut = Some(x);
                 }
             };
             if everything {

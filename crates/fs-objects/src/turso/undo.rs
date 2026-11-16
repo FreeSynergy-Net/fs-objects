@@ -33,10 +33,10 @@ impl TursoStore {
             )));
         }
         let mut restored = cs.before;
-        if let (Some(r), Some(c)) = (restored.as_mut(), current.as_ref()) {
-            if r.original.is_none() {
-                r.original.clone_from(&c.original);
-            }
+        if let (Some(r), Some(c)) = (restored.as_mut(), current.as_ref())
+            && r.original.is_none()
+        {
+            r.original.clone_from(&c.original);
         }
         let ch = Change {
             kind: ActivityKind::Undo,
