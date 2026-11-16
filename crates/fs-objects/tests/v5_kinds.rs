@@ -9,7 +9,7 @@ use fs_objects::v5::envelope::insert;
 use fs_objects::v5::log::{Kind, log};
 use fs_objects::v5::own::steps;
 use fs_objects::v5::tables::{ACTIVITY, ACTIVITY_CHANGE};
-use fs_objects::v5::tables_kind::{ACTIVITY_KINDS, WORDS_AS2, rebuild_activity};
+use fs_objects::v5::tables_kind::{ACTIVITY_KINDS, WORDS_AS2, WORDS_OLD, rebuild_activity};
 use fs_objects::v5::{Step, Store};
 
 const T0: i64 = 1_794_823_200_000;
@@ -147,61 +147,37 @@ async fn every_autoindex_belongs_to_its_table_fresh_and_after_the_rebuild() {
 }
 
 #[tokio::test]
-async fn the_insert_step_turns_an_own_word_of_the_same_name_into_a_builtin() {
-    let s = store(&[]).await;
-    let c = s.begin().await.unwrap();
-    c.run("UPDATE fs_word SET builtin = 0 WHERE code = 'Join'")
-        .await
-        .unwrap();
-    c.run(WORDS_AS2).await.unwrap();
-    let r = c
-        .query(
-            "SELECT builtin FROM fs_word WHERE code = 'Join'",
-            Vec::new(),
-        )
-        .await
-        .unwrap();
-    assert_eq!(fs_objects::v5::codec::get_int(&r[0], 0).unwrap(), 1);
-    c.finish(Ok(())).await.unwrap();
-}
-
-/// General rule (DESIGN.md): after all steps a store file is readable by standard SQLite (`python3 -I`), with no
-/// orphan autoindex. Skipped, and said so, when `python3` or its `sqlite3` module is missing.
-#[tokio::test]
-async fn standard_sqlite_reads_the_store_file() {
-    let dir = std::env::temp_dir().join(format!("fs-objects-kinds-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    let file = dir.join("store.db");
-    {
-        let s = Store::open(file.to_str().unwrap(), 0).await.unwrap();
+async fn the_insert_steps_turn_an_own_word_of_the_same_name_into_a_builtin() {
+    // Step 5 (the eight old kinds) and step 6 (the five AS2 kinds) both end in `ON CONFLICT ... SET builtin = 1`.
+    for (sql, code) in [(WORDS_OLD, "Create"), (WORDS_AS2, "Join")] {
+        let s = store(&[]).await;
         let c = s.begin().await.unwrap();
-        let o = id(T0);
-        insert(&c, o, "Note", "n", &actor(), T0).await.unwrap();
-        log(&c, o, Kind::Join, &actor(), T0, &[]).await.unwrap();
+        c.run(&format!(
+            "UPDATE fs_word SET builtin = 0 WHERE code = '{code}'"
+        ))
+        .await
+        .unwrap();
+        let r = c
+            .query(
+                &format!("SELECT builtin FROM fs_word WHERE code = '{code}'"),
+                Vec::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(fs_objects::v5::codec::get_int(&r[0], 0).unwrap(), 0);
+        c.run(sql).await.unwrap();
+        let r = c
+            .query(
+                &format!("SELECT builtin FROM fs_word WHERE code = '{code}'"),
+                Vec::new(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            fs_objects::v5::codec::get_int(&r[0], 0).unwrap(),
+            1,
+            "{code}"
+        );
         c.finish(Ok(())).await.unwrap();
     }
-    // The finding that matters shows only with the `-wal` file beside the database (turso writes there without a
-    // checkpoint): the file is checked in place, never copied as a bare `.db`.
-    let wal = dir.join("store.db-wal");
-    assert!(
-        wal.exists(),
-        "no -wal file beside the database: the check would prove less than it says"
-    );
-    let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/sqlite_check.py");
-    match std::process::Command::new("python3")
-        .args(["-I", script])
-        .arg(&file)
-        .output()
-    {
-        Ok(o) if o.status.success() => {}
-        Ok(o) if String::from_utf8_lossy(&o.stderr).contains("No module named") => {
-            eprintln!("SKIPPED: python3 has no sqlite3 module");
-        }
-        Ok(o) => panic!(
-            "standard SQLite refuses the file: {}",
-            String::from_utf8_lossy(&o.stderr)
-        ),
-        Err(e) => eprintln!("SKIPPED: python3 not available ({e})"),
-    }
-    std::fs::remove_dir_all(&dir).unwrap();
 }

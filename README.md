@@ -34,7 +34,7 @@ Objects is what lets programs share the same kinds of things. It used to be call
 ## For developers
 
 - Workspace crate: `fs-objects`. `Store` is a facade over seven small traits (`ObjectRepository`, `ObjectQuery`, `ActivityLog`, `ChangeFeed`, `UndoRedo`, `HistoryRetention`, `StoreInfo`); depend only on the one you need. First backend: `TursoStore`.
-- The shared types of the envelope live with the contracts in [fs-interfaces](https://github.com/FreeSynergy/fs-interfaces) (`common.capnp`).
+- The shared types of the envelope live in [fs-types](https://github.com/FreeSynergy/fs-types) (v0.0.1, feature `v5`).
 - Build and test: `cargo build --workspace` and `cargo test --workspace`.
 - Design, schema and decisions: [DESIGN.md](DESIGN.md).
 - Licence: MIT OR Apache-2.0.
