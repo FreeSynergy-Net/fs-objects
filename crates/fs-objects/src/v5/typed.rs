@@ -4,11 +4,11 @@
 //! name exists is the program's knowledge (it has the zone database); here a zone must only be well formed.
 
 use chrono::DateTime;
-use fs_types::{BasicValue, Reference, Zone};
+use fs_types::{BasicValue, Problem, Reference, Zone};
 use turso::Value;
 
 use super::codec::{int_to_date, invalid, parse_id};
-use super::error::Result;
+use super::error::{Error, Result};
 use super::spec::{Col, Logical, Table};
 
 /// Check one value against its column. The error names `table.column`.
@@ -16,6 +16,18 @@ use super::spec::{Col, Logical, Table};
 /// # Errors
 /// `Invalid` when the value does not fit the logical type.
 pub fn check_value(t: &Table, c: &Col, v: &Value) -> Result<()> {
+    problem(t, c, v).map_or(Ok(()), |p| Err(Error::Invalid(vec![p])))
+}
+
+/// The problem of one value, if it has one.
+fn problem(t: &Table, c: &Col, v: &Value) -> Option<Problem> {
+    match check_inner(t, c, v) {
+        Err(Error::Invalid(mut p)) if !p.is_empty() => Some(p.remove(0)),
+        _ => None,
+    }
+}
+
+fn check_inner(t: &Table, c: &Col, v: &Value) -> Result<()> {
     let field = format!("{}.{}", t.name, c.name);
     let bad = |why: &str| Err(invalid(&field, why));
     if matches!(v, Value::Null) {
@@ -59,13 +71,20 @@ fn check_zone(field: &str, name: &str) -> Result<()> {
 /// Check a whole row (one value per column, in column order).
 ///
 /// # Errors
-/// The first value that does not fit, or `Invalid` when the number of values is wrong.
+/// `Invalid` with one problem for every value that does not fit, or when the number of values is wrong.
 pub fn check_row(t: &Table, values: &[Value]) -> Result<()> {
     if values.len() != t.cols.len() {
         return Err(invalid(t.name, "wrong number of values"));
     }
-    t.cols
+    let all: Vec<Problem> = t
+        .cols
         .iter()
         .zip(values)
-        .try_for_each(|(c, v)| check_value(t, c, v))
+        .filter_map(|(c, v)| problem(t, c, v))
+        .collect();
+    if all.is_empty() {
+        Ok(())
+    } else {
+        Err(Error::Invalid(all))
+    }
 }

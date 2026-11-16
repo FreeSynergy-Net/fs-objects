@@ -24,6 +24,15 @@ pub enum Error {
     /// The store or the engine cannot do it now (also: a damaged row, no OS randomness).
     #[error("unavailable: {0}")]
     Unavailable(String),
+    /// The steps a program reports differ from the ones the store has applied (reordered, inserted or changed: steps
+    /// are only appended).
+    #[error("step {step} of {domain} differs from the one applied to this store")]
+    StepMismatch {
+        /// The domain prefix.
+        domain: String,
+        /// The number of the step, from 1.
+        step: usize,
+    },
     /// A schema step or a registration failed; the store is as it was before that step.
     #[error("schema: {0}")]
     Schema(String),

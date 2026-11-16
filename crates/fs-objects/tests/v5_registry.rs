@@ -30,12 +30,14 @@ const TASKS: Domain = Domain {
     prefix: "tasks",
     about: "tasks",
     tables: &[ONE],
+    channels: &[],
     steps: &[Step::Create(&[ONE])],
 };
 const SHOP: Domain = Domain {
     prefix: "shop",
     about: "shop",
     tables: &[OTHER_SHOP],
+    channels: &[],
     steps: &[Step::Create(&[OTHER_SHOP])],
 };
 const OTHER_SHOP: Table = Table {
@@ -98,6 +100,7 @@ async fn r1_two_domains_idempotent_and_clashes_refused() {
     let outside = Domain {
         prefix: "shop2",
         tables: &[OUTSIDE],
+        channels: &[],
         steps: &[Step::Create(&[OUTSIDE])],
         ..SHOP
     };
@@ -148,6 +151,7 @@ const TYPED_DOMAIN: Domain = Domain {
     prefix: "tasks",
     about: "t",
     tables: &[TYPED],
+    channels: &[],
     steps: &[Step::Create(&[TYPED])],
 };
 const ID: &str = "01927f00-0000-7000-8000-000000000001";
@@ -233,4 +237,19 @@ async fn r2_each_type_stores_a_good_value_and_refuses_a_bad_one_naming_the_field
         fs_types::Date::parse("2026-02-30").is_err(),
         "30 February is not a date"
     );
+}
+
+#[tokio::test]
+async fn a_row_reports_one_problem_for_every_bad_field() {
+    let s = Store::open(":memory:", 0).await.unwrap();
+    s.register_domain(&TYPED_DOMAIN, 0).await.unwrap();
+    let mut row = good();
+    row[1] = "text".into();
+    row[5] = "c".into();
+    row[8] = Value::Integer(2);
+    let Err(Error::Invalid(p)) = put(&s, row).await else {
+        panic!("refused")
+    };
+    let fields: Vec<&str> = p.iter().map(|x| x.field.as_str()).collect();
+    assert_eq!(fields, ["tasks_typed.u", "tasks_typed.e", "tasks_typed.b"]);
 }

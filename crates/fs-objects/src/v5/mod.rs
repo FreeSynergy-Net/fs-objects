@@ -12,6 +12,7 @@ pub mod error;
 pub mod id;
 pub mod migrate;
 pub mod registry;
+pub mod schema;
 pub mod spec;
 pub mod store;
 pub mod tables;

@@ -4,7 +4,7 @@
 
 use super::spec::{
     Col,
-    Logical::{Blob, Enum, Int, Iri, Local, Ref, Text, Utc},
+    Logical::{Blob, Int, Iri, Local, Ref, Text, Utc},
     Table,
 };
 use super::tables::{ACTIVITY, ACTIVITY_CHANGE, OBJECTS, SETTING};
@@ -32,16 +32,9 @@ pub const META: Table = Table {
     indexes: &[],
 };
 
-/// Where an imported object came from.
-pub const CHANNELS: &[&str] = &[
-    "file",
-    "caldav",
-    "google",
-    "outlook",
-    "itip",
-    "hub",
-    "subscription",
-];
+/// Channel names a program may use for `object_origin.channel` (a domain lists its own, general names, in
+/// `Domain::channels`; a channel is no calendar thing: `carddav` for people, `caldav` for calendar are the program's).
+pub const COMMON_CHANNELS: &[&str] = &["file", "import", "subscription", "sync", "manual", "hub"];
 const FK_OBJECT: &str = "FOREIGN KEY (object) REFERENCES objects(id) ON DELETE CASCADE";
 const HEX: &str = "CHECK (length(sha256) = 64 AND sha256 NOT GLOB '*[^0-9a-f]*')";
 
@@ -65,7 +58,7 @@ pub const OBJECT_ORIGIN: Table = Table {
     name: "object_origin",
     cols: &[
         Col::req("object", Ref),
-        Col::req("channel", Enum(CHANNELS)),
+        Col::req("channel", Text),
         Col::req("source", Iri),
         Col::req("media_type", Text),
         Col::req("foreign_uid", Text),

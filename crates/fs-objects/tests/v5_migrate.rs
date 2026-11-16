@@ -48,7 +48,7 @@ fn create_part<'a>(c: &'a Conn<'_>) -> StepFuture<'a> {
 const STEPS: [Step; 3] = [
     Step::Create(&[ITEM_V1]),
     Step::Sql("ALTER TABLE demo_item ADD COLUMN note TEXT"),
-    Step::Code(create_part),
+    Step::Code("create_part", create_part),
 ];
 
 fn domain(n: usize) -> Domain {
@@ -61,6 +61,7 @@ fn domain(n: usize) -> Domain {
         prefix: "demo",
         about: "demo",
         tables,
+        channels: &[],
         steps: &STEPS[..n],
     }
 }
@@ -177,6 +178,7 @@ async fn a_failing_step_changes_nothing_and_an_older_program_is_refused() {
         prefix: "demo",
         about: "demo",
         tables: &[ITEM_V1],
+        channels: &[],
         steps: &BAD,
     };
     let r = s.register_domain(&bad, 1).await;
