@@ -282,3 +282,7 @@ threads; it fails with "database is locked" without the retry).
 
 * Exact index search is O(n) (2,6 ms at 100 texts, 5,5 ms at 400, measured through fs-wiki) and `order_by_index` sorts all candidates before it cuts: pages stay linear in the rows read but cost O(rest) in the database. Measure again on 0.4 before anybody optimises.
 * `purge_object`: callers use `sync_then_purge` of `fs-hub-client` (see the lock above).
+
+## Schema v5 (draft)
+
+* `docs/v5-entwurf.md` (2026-11-16, draft, no code): typed tables instead of JSON `content` (ADR 0086), the requirement list of the first user (fs-calendar) and the second (fs-tasks), the migration sketch v4 -> v5, and what the embedded engine can do (`tests/v5_probe.rs`). Nothing in `src/` changes until the review is done.
