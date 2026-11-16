@@ -617,7 +617,7 @@ checksum = "3f9eec918d3f24069decb9af1554cad7c880e2da24a9afd88aca000531ab82c1"
 [[package]]
 name = "fs-interfaces"
 version = "0.0.26"
-source = "git+https://github.com/FreeSynergy/fs-interfaces?tag=v0.0.26#f1a2f653c38ea2c2fd3c0d1e99509a2278f0105d"
+source = "git+https://github.com/FreeSynergy/fs-interfaces?tag=v0.0.26#9df19ee323145119e89c003e64982be68e9fc1da"
 dependencies = [
  "capnp",
  "idna",
@@ -647,7 +647,7 @@ dependencies = [
 [[package]]
 name = "fs-types"
 version = "0.0.26"
-source = "git+https://github.com/FreeSynergy/fs-interfaces?tag=v0.0.26#f1a2f653c38ea2c2fd3c0d1e99509a2278f0105d"
+source = "git+https://github.com/FreeSynergy/fs-interfaces?tag=v0.0.26#9df19ee323145119e89c003e64982be68e9fc1da"
 dependencies = [
  "capnp",
  "chrono",
