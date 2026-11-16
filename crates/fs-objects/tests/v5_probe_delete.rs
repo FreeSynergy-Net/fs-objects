@@ -58,6 +58,18 @@ async fn delete_plus_insert_and_replace_wipe_the_history_but_upsert_does_not() {
         count(&c, "activity").await
     );
     let after_replace = count(&c, "activity").await + count(&c, "activity_change").await;
+    run(
+        &c,
+        "INSERT OR IGNORE INTO objects VALUES ('o1', 'four', NULL)",
+    )
+    .await;
+    run(&c, "INSERT INTO activity VALUES ('a2', 'o1')").await;
+    run(&c, "INSERT INTO activity_change VALUES ('a2', 0)").await;
+    assert_eq!(
+        count(&c, "activity").await,
+        1,
+        "history is back before the plain DELETE"
+    );
     run(&c, "DELETE FROM objects WHERE id = 'o1'").await;
     run(&c, "INSERT INTO objects VALUES ('o1', 'five', NULL)").await;
     assert_eq!(
