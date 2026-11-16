@@ -9,7 +9,7 @@ Marks: **[ADR n]** decided · **[probe]** the embedded engine was tested (`crate
 
 Inputs: ADR 0086 (typed storage, accepted 2026-11-15, incl. the two additions: cipher exception, money), ADR 0085 (accepted,
 closed 2026-11-16), ADR 0020/0030/0042/0073/0029/0067; `DESIGN.md` of this repo (schema v4); fs-calendar plan `PLAN.md`
-section 2 and the trait file `appointments_v1.rs` (SHA-256 `f8e7fd1f...` as read on 2026-11-16); fs-tasks `model/task.rs`.
+section 2 and the **locked** trait folder `appointments_v1/` (folder hash SHA-256 `2b7fc98b5bf777a0c4f32ddf6d9c2b3ac5c784425df0ef2fe61c31c8ec5519b8`, lock file `.scratch/sperren/appointments_v1.sha256`, re-read on 2026-11-16 after the earlier candidate `f8e7fd1f...`); fs-tasks `model/task.rs`.
 
 ## 1. What changes, in one page
 
@@ -84,6 +84,9 @@ fs_domain (prefix TEXT PK, version INTEGER, description TEXT, applied UTC)
 fs_column (domain TEXT, tbl TEXT, col TEXT, logical ENUM, nullable BOOL, derived BOOL, PRIMARY KEY (domain, tbl, col))
 ```
 
+The tables of fs-objects itself (section 3), `fs_domain`, `fs_column` and `fs_migration` (section 7) are registered in `fs_column`
+under the reserved domain `fs_`/`object`, like any other; otherwise R14 would flag the store's own tables.
+
 ### 2.3 The composite `WHEN` (calendar `When`, task `due`/`start`)
 
 Follows the closed trait (`When::{Timed, Floating, AllDay}`) and ADR 0085 section 2.
@@ -102,14 +105,25 @@ Follows the closed trait (`When::{Timed, Floating, AllDay}`) and ADR 0085 sectio
 ```
 CHECK (kind = 'timed'    AND local IS NOT NULL AND date IS NULL AND zone IS NOT NULL
     OR kind = 'floating' AND local IS NOT NULL AND date IS NULL AND zone IS NULL AND zone_assumed = 0 AND end_zone IS NULL
-    OR kind = 'all_day'  AND local IS NULL AND date IS NOT NULL AND zone IS NULL AND zone_assumed = 0 AND len_seconds = 0)
+    OR kind = 'all_day'  AND local IS NULL AND date IS NOT NULL AND zone IS NULL AND end_zone IS NULL AND zone_assumed = 0
+                         AND len_seconds = 0 AND len_days >= 1)
 ```
 
+`zone_assumed` is a `BOOL` and carries its own `CHECK (zone_assumed IN (0,1))`; the trait's `AllDay.days >= 1` is the
+`len_days >= 1` above. **[probe: all_day with `end_zone`, with `len_days = 0` and a BOOL of 2 are refused, in a `STRICT` table
+with FK and partial index]**
+
 Hull (derived, written by code on every write and by `reindex`, R11): `timed`: exact start and end instant. `floating` and
-`all_day`: the local interval widened by the largest zone offsets (start - 14 h, end + 12 h), so a window query finds every
+`all_day`: the local interval widened by the largest zone offsets (**start - 16 h, end + 16 h**), so a window query finds every
 candidate in any viewer zone; the provider then places the row exactly in the viewer zone (`view_zone` of the trait's `window`).
-Window query: `utc_min < :to AND utc_max > :from` **[sketch; offsets -12 h..+14 h are an assumption to check against the tz
-database before build, [not checked]]**.
+Window query: `utc_min < :to AND utc_max > :from`.
+
+Offset range **[checked, not by a Rust probe]**: a scan of all IANA zones of the system tz database (Python `zoneinfo`, quarterly
+samples 1800-2100, 2026-11-16) finds today's range -12 h..+14 h but also historical local mean times beyond it: `Asia/Manila`
+-15:56, `Pacific/Palau` -15:02, `Pacific/Guam`/`Saipan` -14:21, `Pacific/Kosrae` -13:08 and east `America/Metlakatla` +15:14,
+`Juneau` +15:02, `Sitka` +14:59, `Yakutat` +14:41, `Anchorage` +14:00:24 (all before 1900). So -14 h/+12 h would miss rows;
+the draft takes **+-16 h** as the known bound. Known limit: a later tz database may add a larger offset; `reindex` (R11) after
+a tz update and the build-time test "every zone of the database lies inside +-16 h" (to add) catch it.
 
 ### 2.4 The exceptions (and only these)
 
@@ -121,12 +135,12 @@ database before build, [not checked]]**.
 |---|---|---|
 | `objects` | `id REF PK`, `iri IRI NULL`, `type TEXT` (AS2/domain type name, an open set, no CHECK), `name TEXT NOT NULL`, `name_sort TEXT NOT NULL` (derived, as v4), `attributed_to PERSON NULL`, `published UTC`, `updated UTC`, `context REF NULL`, `in_reply_to REF NULL`, `describes REF NULL`, `rev INT NOT NULL`, `deleted UTC NULL`, `purge_after UTC NULL` | Replaces v4 `objects`; no `content`, `original*`, `addressing`, `sensitive`, `start_time`, `end_time`. `deleted`/`purge_after` carry the trash (calendar `restore`) |
 | `object_original` | `object REF PK`, `media_type TEXT`, `bytes BLOB NULL`, `file FILE NULL`, `sha256 TEXT`, `received UTC`, `keep_until UTC NULL` | exactly one of `bytes`/`file`; immutable after insert (ADR 0030); retention per kind (ADR 0086 item 4) |
-| `object_origin` | `object REF PK`, `channel ENUM(file,caldav,google,outlook,itip,hub)`, `source IRI`, `media_type TEXT`, `foreign_uid TEXT`, `foreign_recurrence_id LOCAL NULL`, `foreign_etag TEXT NULL`, `prod_id TEXT NULL`, `imported UTC`, `importer TEXT`, `rev_at_import INT` | shape taken from the trait's `Origin`; "unchanged since import" is **computed**: `objects.rev = rev_at_import` (no stored flag) |
+| `object_origin` | `object REF PK`, `channel ENUM(file,caldav,google,outlook,itip,hub,subscription)`, `source IRI`, `media_type TEXT`, `foreign_uid TEXT`, `foreign_recurrence_id LOCAL NULL`, `foreign_etag TEXT NULL`, `prod_id TEXT NULL`, `imported UTC`, `importer TEXT`, `rev_at_import INT`, `original FILE NULL` (= `original_iri`, `original_sha256`, `original_media_type`, all three NULL or none: CHECK) | shape taken from the trait's `Origin` (locked folder, `OriginChannel` has seven members, `Subscription` = feed URL, `source` is the feed IRI); "unchanged since import" is **computed**: `objects.rev = rev_at_import` (no stored flag). `original` mirrors `Origin.original: Option<FileRef>`: it is the **copy of the pointer** to the kept original, not a second store. If the bytes sit in `object_original.bytes`, then `original_iri = urn:sha256:<hex>` (the same form the trait gives `source` for files), `original_sha256` = `object_original.sha256`; if they sit in `fs-files`, it equals `object_original.file`. `NULL` = no original kept **[sketch]** |
 | `object_addressing` | `object REF`, `role ENUM(to,cc,bto,bcc,audience)`, `target PERSON`, PK all | replaces JSON `addressing` |
 | `object_protection` | `object REF`, `category ENUM` (ADR 0029 vocabulary), `level ENUM`, `set_by PERSON`, `set_at UTC`, PK (object, category) | replaces JSON `sensitive` and the `freesynergy.net:sensitive` key |
 | `person_snapshot` | `id REF PK`, `person_id IRI`, `person_art ENUM`, `captured UTC`, `source REF NULL`, `doc_kind ENUM`, `issued DATE`, `keep_until DATE`, plus the fields the feed list of that `doc_kind` allows (name, address ...) | the frozen excerpt (ADR 0085 section 3); frozen = never updated (R8) |
-| `activity` | `id REF PK` (UUIDv7, strictly monotonic as v4), `kind ENUM` (the AS2 kinds of v4), `object REF`, `actor PERSON`, `at UTC`, `target REF NULL`, `synced BOOL`, `redacted BOOL` | no payload column |
-| `activity_change` | `activity REF`, `seq INT`, `field TEXT`, `row_key TEXT NULL`, `value_kind ENUM(int,real,text,bool,utc,local,date,zone,ref,person)`, `old_int/old_real/old_text/old_bool INTEGER/REAL/TEXT/INTEGER NULL`, `new_*` the same, `old_person_id/_art`, `new_person_id/_art`, PK (activity, seq) | one row per changed field; `utc`/`local`/`date`/`bool`/`ref`/`zone` use the matching `*_int`/`*_text` column by `value_kind`; the calendar trait's `Value` enum maps one to one |
+| `activity` | `id REF PK` (UUIDv7, strictly monotonic as v4), `kind ENUM` (the AS2 kinds of v4), `object REF NOT NULL REFERENCES objects(id) ON DELETE CASCADE`, `actor PERSON`, `at UTC`, `target REF NULL` (no FK), `synced BOOL`, `redacted BOOL`, `explained BOOL` | no payload column. `redacted` keeps its v4 meaning. `explained` = 1: the `activity_change` rows are the complete diff (or the kind has none by nature); 0: migrated from a v4 payload without a domain migrator, no change rows (D7). Behaviour on delete: R4 |
+| `activity_change` | `activity REF NOT NULL REFERENCES activity(id) ON DELETE CASCADE`, `seq INT`, `field TEXT`, `row_key TEXT NULL`, `value_kind ENUM(int,real,text,bool,utc,local,date,zone,object,iri,person,attendee)`, then for `old_` and again for `new_`: `_int INTEGER`, `_real REAL`, `_text TEXT`, `_person_id IRI`, `_person_art ENUM(profile,person,group,organization)`, `_person_abzug REF`, `_who_kind ENUM(actor,resource,location)`, `_who_id IRI`, `_who_art ENUM(profile,person,group,organization)`, `_who_abzug REF` (all NULL), PK (activity, seq) | one row per changed field; no JSON, no blob (ADR 0086 item 2). Every variant of the trait's `Value` has exactly one column group, chosen by `value_kind`: `int`,`bool`,`utc`,`local`,`date` -> `_int` (as 2.1); `real` -> `_real`; `text`,`zone`,`object` (REF text),`iri` (`Reference`) -> `_text`; `person` (`PersonRef`) -> `_person_id/_art/_abzug`; `attendee` (`Attendee::Actor(PersonRef)`, `Resource(Reference)`, `Location(Reference)`) -> `_who_kind` + `_who_id`, plus `_who_art/_who_abzug` for `actor` only. Table `CHECK`: the columns of other kinds are NULL (and `_who_art` is NULL unless `_who_kind = 'actor'`). A field that was absent/cleared has all columns of that side NULL. The value columns carry **no FK** (`object`, `_abzug`): history must survive the purge of what it names |
 | `unlogged_ids`, `purged_objects`, `schema_version` | as v4 | already typed |
 | `meta` | `key TEXT PK`, `value TEXT` for the scalar keys (`store_id`, `activity_high`); the `retention` key is **JSON text today** (`turso/retention.rs` stores `serde_json::to_string(&Retention)`): v5 moves it to a typed table `retention(kind TEXT PK, keep_ms INT NULL, max_steps INT NULL, ...)` with the fields of `Retention` **[read from the code, fields not listed here]** | the finding is part of R14: the check must find it |
 
@@ -143,8 +157,8 @@ contract is final). The check column says how a reviewer verifies the requiremen
 | R1 | A program **registers a domain**: prefix, version, tables (columns with logical types, keys, `CHECK`, indexes), own migrations. fs-objects creates the tables and records them in `fs_domain`/`fs_column`. Prefix `object`, `activity`, `person`, `fs_` are reserved | `calendar_` | `tasks_` (or shared `jscal_`, D1) | test: register two domains, open twice (idempotent), register a clashing prefix (error) |
 | R2 | **Column types with checks on write**: `UTC`, `LOCAL`, `DATE`, `ZONE`, `ENUM`, `REF`, `IRI`, `PERSON`, `FILE`, `WHEN`, `MONEY`; `ZONE` against the tz database or the object's own custom zone; `LOCAL`/`DATE` must be real calendar values (30 Feb refused). The registry renders them for dumps | K: all | T: `DATE` for all-day due, `LOCAL`, `ZONE`, `PERSON` for assignee | table-driven test per type: good value stored and read back equal, bad value refused with the field name |
 | R3 | **One transaction** over the envelope row, the domain rows (many tables), `activity` and `activity_change` (today `put_and_log`) | A write touches up to ~15 tables | tasks: task + labels + relations + board order | test: failure in the last table leaves no row anywhere ([probe: rollback across tables works]) |
-| R4 | **Foreign keys with cascade**: domain child rows reference their parent row; deleting an object removes its domain rows and its `object_*` rows. Every connection must run `PRAGMA foreign_keys = ON` | exception rows, participants, alerts ... | relations, labels | [probe: **off by default**, an orphan row is accepted until the pragma is set; with it, orphans are refused and `ON DELETE CASCADE` works]. Test: connection opened by the store refuses an orphan |
-| R5 | **`CHECK` and partial unique indexes** (or an equal check in code) | `calendar_appointment` CHECK of 2.3; `UNIQUE (uid) WHERE master IS NULL`; `UNIQUE (master, recurrence_id) WHERE master IS NOT NULL` | `UNIQUE (uid)` | [probe: both accepted and enforced]. Test: violating rows refused |
+| R4 | **Foreign keys with cascade**: domain child rows reference their parent row; deleting an object removes its domain rows and its `object_*` rows. Every connection must run `PRAGMA foreign_keys = ON` (it is per connection and not stored in the file). **Trash vs purge**: trash is `UPDATE objects SET deleted/purge_after` (no row is deleted, FKs do nothing, activity stays, `restore` works); **purge** is `DELETE FROM objects`: `activity.object` and `activity_change.activity` are `ON DELETE CASCADE`, so the purge removes the object's activity rows and their changes in the same statement (ADR 0029, R10); the id goes into `purged_objects` in the same transaction. `activity.target`, `objects.context/in_reply_to/describes` and the value columns of `activity_change` are **plain `REF`s without FK**: naming a purged object must neither fail nor cascade. A series: the cascade `master -> exception rows` removes the domain rows of the exceptions but **not their envelope rows**; purge deletes every `objects` row of the series in the one transaction (R3) | exception rows, participants, alerts ... | relations, labels | [probe: **off by default**, an orphan row is accepted until the pragma is set; with it, orphans are refused and `ON DELETE CASCADE` works; on TEXT keys, self-referencing `master`, four levels deep; a second connection and a reopened file start with the pragma **off**]. Test: connection opened by the store refuses an orphan; purge removes activity and changes, trash does not |
+| R5 | **`CHECK` and partial unique indexes** (or an equal check in code) | `calendar_appointment` CHECK of 2.3; `UNIQUE (uid) WHERE master IS NULL`; `UNIQUE (master, recurrence_id) WHERE master IS NOT NULL` | `UNIQUE (uid)` | [probe: both accepted and enforced, also on TEXT (UUID) keys and in a `STRICT` table with CHECK and FK]. Test: violating rows refused |
 | R6 | **Typed queries** replace `index_fields`: range on `UTC`/`LOCAL`/`DATE`, equality on `ENUM`/`REF`/`PERSON`/`IRI`, text contains on declared `TEXT` columns, order by any column, **keyset paging** `(sort key, id)`. Query values are typed, no `value_norm` string | window by hull, "my invitations" by `person_id`, search title | due range, by assignee, by label, by progress | test: 1000 rows, page through, same order as a full sort; plan check: the window query uses the index (`EXPLAIN QUERY PLAN`) **[not checked]** |
 | R7 | **`rev` per envelope**: counter, bumped by every write of the object (envelope or any of its domain rows); `put_checked(expected_rev)` = `UPDATE ... WHERE id = ? AND rev = ?`, rows affected 0 = `Changed{current}` | trait `update(expected: Revision)` | `edit_checked` | test: two writers, the second gets `Changed`; no write on a no-change |
 | R8 | The general tables of section 3, including `object_origin` (replaces the plan's `unchanged_since_import`) and `person_snapshot` (**insert-only**, no update path) | origin of imports; snapshot only for bookings later | assignee only | tests: update of a snapshot refused; `object_original` immutable (existing v4 rule) |
@@ -191,7 +205,7 @@ contract is final). The check column says how a reviewer verifies the requiremen
 | D4 | Type checks: engine only (`STRICT`) or also in code | STRICT + code checks per logical type (R2) | both: STRICT catches wrong storage class, R2 the meaning (`ZONE`, 30 Feb) |
 | D5 | Migrate in place or into a new file | in place / new file next to the old | new file (section 7), old file untouched until the person confirms |
 | D6 | `rev` counter per object or per row | per object | per object: the trait compares one `Revision` of the appointment |
-| D7 | Is the activity `payload` of v4 migrated to typed changes or kept read-only in the old file | convert / keep | convert what the domain can explain; objects of unknown types keep their activity rows **without** changes plus `redacted = 0` and a note in the report |
+| D7 | Is the activity `payload` of v4 migrated to typed changes or kept read-only in the old file | convert / keep | convert what the domain can explain; objects of unknown types keep their activity rows **without** changes, marked by the own column `activity.explained = 0` (`redacted` keeps its v4 meaning and is copied unchanged), and a note in the report |
 
 ## 6. Store API sketch (names are placeholders)
 
@@ -225,7 +239,7 @@ Goals: nothing is lost silently, the old file stays until a human deletes it, th
    written. v5 is built into a **new file** (D5); the v4 file is opened read-only.
 2. **Envelope.** Per `objects` row: `type`, `name`, `attributed_to` (text -> `PERSON`: the IRI as written, `art` looked up through
    the domain or `person`), `published`/`updated` (v4 microseconds -> `UTC` ms, **rounding recorded**), `context`, `in_reply_to`,
-   `describes`. `rev` starts at 1. `iri` kept.
+   `describes`. `rev` starts at 1. `iri` kept. For an imported object (`object_origin` written from the v4 origin data) `rev_at_import` is set **after** the domain step: `1` if the v4 side says "unchanged since import" (so `rev = rev_at_import`), otherwise `0` (so it counts as changed); an unknown state counts as changed. Otherwise "unchanged since import" would be lost.
 3. **Domain content.** The registered `V4Migrator` of the object's `type` reads `content` (JSON, domain standard) and writes the
    typed rows through `DomainWrite`; the calendar's version normalizes like an import (floating time -> zone of the person + `zone_assumed`, all-day with a zone -> zone dropped + note, participants with name+e-mail -> `PersonDirectory`, one collective proposal) as `PLAN.md` 2.4 lists.
 4. **Addressing, protection.** `addressing` JSON -> `object_addressing` rows; `sensitive` JSON and the `freesynergy.net:sensitive` key -> `object_protection`.
@@ -233,15 +247,15 @@ Goals: nothing is lost silently, the old file stays until a human deletes it, th
 6. **Activities.** `payload` `ChangeSet{before, after}` -> `activity` + `activity_change`: the domain migrator explains the diff of two images as typed field changes (`explain(before, after) -> Vec<FieldChange>`). Unknown type: activity row without changes (D7). `redacted`, `synced`, `purged_objects`, `unlogged_ids`, `meta` and the store identity are copied unchanged; the activity id order is kept (monotonic ids, ADR 0020).
 7. **Unknown fields.** A field the typed tables cannot hold and that is not in the original: the object is **held** (not migrated), listed in the report, run continues; resolved by a human (ADR 0086 item 5, plan O6).
 8. **Round trip per object** (red = the object is not migrated): v4 JSON -> typed rows -> export through the domain's boundary adapter -> compare with the v4 JSON **after the documented normalization**. Unchanged received data: export = `object_original` byte for byte.
-9. **Resumable.** A table `fs_migration(source_sha256, last_object REF, state ENUM(running, held, done), at UTC)` in the new file; a restart continues after `last_object`; changed `source_sha256` aborts.
+9. **Resumable.** A table `fs_migration(source_sha256, last_object REF, state ENUM(running, held, done), at UTC)` in the new file, itself declared in `fs_column` (2.2) and `STRICT`, so R14 does not flag it; a restart continues after `last_object`; changed `source_sha256` aborts.
 10. **Report** (`MigrationReport`): counts per type; per object: migrated / migrated with normalization notes / held; losses; people proposals. Written as a file next to the store and returned to the caller; **never** only logged.
 11. **Swap** only after the person confirms: the v5 file becomes the store, the v4 file and its `.bak` stay.
 12. **Dependents.** `rev` changes meaning (counter instead of hash): frontends and caches re-read after the migration. Programs that read `start_time`/`end_time` of the envelope (fs-calendar) change in their own migration step.
 
 ## 8. What the engine does, measured
 
-`crates/fs-objects/tests/v5_probe.rs` (turso `=0.8.3`, in-memory connection). The probes pin today's behaviour; a flip means
-this section and R4/R5/R16 are re-read.
+`crates/fs-objects/tests/v5_probe.rs` and `v5_probe_keys.rs` (turso `=0.8.3`; in-memory connections, one probe on a file in the
+cargo target tmp dir). The probes pin today's behaviour; a flip means this section and R4/R5/R16 are re-read.
 
 | Probe | Result |
 |---|---|
@@ -249,7 +263,12 @@ this section and R4/R5/R16 are re-read.
 | `CHECK (...)` in `CREATE TABLE` | accepted and enforced |
 | `CREATE UNIQUE INDEX ... WHERE ...` (partial) | accepted and enforced |
 | Foreign key, `ON DELETE CASCADE` | works **after `PRAGMA foreign_keys = ON`**; without it orphan rows are accepted (off by default) |
-| One transaction over several tables, `ROLLBACK` | works |
+| One transaction over several tables, `ROLLBACK` | works; also after a failed statement (CHECK, FK) inside the transaction: `ROLLBACK` leaves nothing and the connection stays usable |
+| FK and partial `UNIQUE` on `TEXT` (UUID) keys | work (orphan refused, second master refused, same `(master, recurrence)` refused) |
+| Self-referencing FK (`master -> appointment`, `ON DELETE CASCADE`), cascade over four levels (objects -> appointment -> participant -> alert, composite FK) | works; envelope rows of the exceptions are not removed (code does, R4) |
+| `PRAGMA foreign_keys` on a second connection of the same file, and after reopening the file | **off** on both: the pragma is per connection, not stored; the store sets it on every connection. [not checked: encrypted file] |
+| `STRICT` together with `CHECK` (`IN`, composite `OR`), FK and partial unique index in one table | all enforced |
+| `activity -> objects` and `activity_change -> activity` with `ON DELETE CASCADE` | purge (`DELETE`) removes both; trash (`UPDATE deleted`) keeps them |
 | Composite primary key, `CHECK (x IN (..))` as ENUM, `ALTER TABLE ADD COLUMN ... DEFAULT` | work |
 | `STRICT` tables | accepted; `TEXT` into `INTEGER` is refused; a plain table accepts it |
 | Generated columns | refused (experimental flag) |
@@ -264,5 +283,5 @@ this section and R4/R5/R16 are re-read.
 5. R14 is a real gate: can it fail on a JSON-in-TEXT column? (heuristic only, see R14).
 6. Section 7 step 6 (activities): is converting images to typed changes worth it for objects whose domain has no migrator (D7)?
 7. `meta.retention` is JSON in v4 (section 3): typed table in v5, agreed?
-8. `WHEN` hull offsets (2.3) checked against the tz database before build.
+8. `WHEN` hull offsets (2.3): +-16 h taken from the tz scan (historical local mean times); agree, and add the build-time zone test.
 9. The tasks list (section 4) is enough for a second user to test the contract (ADR 0045).

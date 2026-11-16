@@ -126,7 +126,8 @@ async fn partial_unique_index_is_enforced() {
 #[tokio::test]
 async fn foreign_key_cascade_deletes_child_rows() {
     let c = scratch().await;
-    let _ = c.execute("PRAGMA foreign_keys = ON", ()).await;
+    let pragma = c.execute("PRAGMA foreign_keys = ON", ()).await;
+    assert!(pragma.is_ok(), "the pragma is understood: {pragma:?}");
     c.execute("CREATE TABLE p (id INTEGER PRIMARY KEY)", ())
         .await
         .unwrap();
@@ -170,7 +171,7 @@ async fn one_transaction_over_several_tables_rolls_back_together() {
 }
 
 #[tokio::test]
-async fn composite_keys_without_rowid_text_enum_and_add_column() {
+async fn composite_keys_text_enum_and_add_column() {
     let c = scratch().await;
     c.execute("CREATE TABLE r (a INTEGER NOT NULL, k TEXT NOT NULL, part TEXT NOT NULL CHECK (part IN ('day','month')), v INTEGER NOT NULL, PRIMARY KEY (a, k, part, v))", ()).await.unwrap();
     assert!(
