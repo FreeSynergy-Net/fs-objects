@@ -27,24 +27,13 @@ const OUTSIDE: Table = Table {
     constraints: &["PRIMARY KEY (id)"],
     indexes: &[],
 };
-const TASKS: Domain = Domain {
-    prefix: "tasks",
-    about: "tasks",
-    tables: &[ONE],
-    channels: &[],
-    children: &[],
-    expiries: &[],
-    steps: &[Step::Create(&[ONE])],
-};
-const SHOP: Domain = Domain {
-    prefix: "shop",
-    about: "shop",
-    tables: &[OTHER_SHOP],
-    channels: &[],
-    children: &[],
-    expiries: &[],
-    steps: &[Step::Create(&[OTHER_SHOP])],
-};
+const TASKS: Domain = Domain::new("tasks", "tasks", &[ONE], &[Step::Create(&[ONE])]);
+const SHOP: Domain = Domain::new(
+    "shop",
+    "shop",
+    &[OTHER_SHOP],
+    &[Step::Create(&[OTHER_SHOP])],
+);
 const OTHER_SHOP: Table = Table {
     name: "shop_item",
     cols: &[Col::req("id", Ref)],
@@ -91,38 +80,27 @@ async fn r1_two_domains_idempotent_and_clashes_refused() {
         .unwrap();
     assert_eq!(cols[0], vec![Value::Text("text".into()), Value::Integer(0)]);
     drop(c);
-    let more = Domain {
-        tables: &[ONE, OTHER],
-        ..TASKS
-    };
+    let mut more = TASKS;
+    more.tables = &[ONE, OTHER];
     assert!(
         is_invalid(&s.register_domain(&more, 7).await, "prefix"),
         "other table list under a used prefix"
     );
     for reserved in ["object", "activity", "person", "fs", "", "Bad", "x_"] {
-        let d = Domain {
-            prefix: reserved,
-            ..TASKS
-        };
+        let mut d = TASKS;
+        d.prefix = reserved;
         assert!(
             is_invalid(&s.register_domain(&d, 7).await, "prefix"),
             "{reserved}"
         );
     }
-    let outside = Domain {
-        prefix: "shop2",
-        tables: &[OUTSIDE],
-        channels: &[],
-        children: &[],
-        expiries: &[],
-        steps: &[Step::Create(&[OUTSIDE])],
-        ..SHOP
-    };
+    let outside = Domain::new("shop2", "shop", &[OUTSIDE], &[Step::Create(&[OUTSIDE])]);
     assert!(
         is_invalid(&s.register_domain(&outside, 7).await, "tables"),
         "a table outside the prefix"
     );
-    let none = Domain { steps: &[], ..SHOP };
+    let mut none = SHOP;
+    none.steps = &[];
     assert!(is_invalid(&s.register_domain(&none, 7).await, "steps"));
 }
 
@@ -161,15 +139,7 @@ const TYPED: Table = Table {
     constraints: &["PRIMARY KEY (id)"],
     indexes: &[],
 };
-const TYPED_DOMAIN: Domain = Domain {
-    prefix: "tasks",
-    about: "t",
-    tables: &[TYPED],
-    channels: &[],
-    children: &[],
-    expiries: &[],
-    steps: &[Step::Create(&[TYPED])],
-};
+const TYPED_DOMAIN: Domain = Domain::new("tasks", "t", &[TYPED], &[Step::Create(&[TYPED])]);
 const ID: &str = "01927f00-0000-7000-8000-000000000001";
 
 fn good() -> Vec<Value> {

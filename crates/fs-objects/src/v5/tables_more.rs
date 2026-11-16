@@ -80,7 +80,16 @@ pub const OBJECT_ORIGIN: Table = Table {
     indexes: &[],
 };
 
-/// All tables of this module, in creation order (parents first).
+/// A hold on an object: the trash period does not end it while the hold lasts (`until` empty = never released). Created
+/// by its own, later step of the store's domain (v0.0.3); not part of [`ALL`], which is step 1 and stays as it was.
+pub const OBJECT_HOLD: Table = Table {
+    name: "object_hold",
+    cols: &[Col::req("object", Ref), Col::opt("until", Utc)],
+    constraints: &["PRIMARY KEY (object)", FK_OBJECT],
+    indexes: &[],
+};
+
+/// The tables of step 1, in creation order (parents first).
 pub const ALL: [Table; 9] = [
     SETTING,
     OBJECTS,

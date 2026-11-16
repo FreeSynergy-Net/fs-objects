@@ -15,6 +15,7 @@ pub mod envelope;
 pub mod envelope_trash;
 pub mod error;
 pub mod files;
+pub mod hold;
 pub mod id;
 pub mod log;
 pub mod log_codec;

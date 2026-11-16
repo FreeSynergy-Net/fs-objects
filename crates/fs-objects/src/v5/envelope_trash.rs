@@ -8,6 +8,7 @@ use super::codec::{get_int, id_value, int, invalid};
 use super::conn::Conn;
 use super::envelope::{DEFAULT_TRASH_DAYS, missed, state};
 use super::error::{Error, Result};
+use super::hold::{is_held, trash_auto};
 
 const DAY_MS: i64 = 86_400_000;
 
@@ -48,7 +49,11 @@ pub async fn trash(
     expected: Revision,
     now: i64,
 ) -> Result<(Revision, i64)> {
-    let until = now + trash_days(c).await? * DAY_MS;
+    let until = trash_days(c)
+        .await?
+        .checked_mul(DAY_MS)
+        .and_then(|span| now.checked_add(span))
+        .ok_or_else(|| invalid("setting.trash_days", "the period is too long"))?;
     let exp = int(i64::try_from(expected.0).unwrap_or(i64::MAX));
     let sql = "UPDATE objects SET rev = rev + 1, updated = ?, deleted = ?, purge_after = ? WHERE id = ? AND rev = ? AND deleted IS NULL";
     let n = c
@@ -61,19 +66,23 @@ pub async fn trash(
     }
 }
 
-/// Take an object out of the trash while `purge_after` has not passed.
+/// Take an object out of the trash while `purge_after` has not passed, or while a hold lasts, or when the trash is not
+/// emptied automatically (the object is still there then).
 ///
 /// # Errors
 /// `NotFound` when there is no row or the period is over; `Invalid` when it is not in the trash.
 pub async fn untrash(c: &Conn<'_>, id: ObjectId, now: i64) -> Result<Revision> {
     let s = state(c, id).await?.ok_or(Error::NotFound(id))?;
-    match (s.deleted, s.purge_after) {
-        (Some(_), Some(until)) if until > now => {
-            let sql = "UPDATE objects SET rev = rev + 1, updated = ?, deleted = NULL, purge_after = NULL WHERE id = ?";
-            c.exec(sql, vec![int(now), id_value(id)]).await?;
-            Ok(Revision(s.rev + 1))
+    let open = match (s.deleted, s.purge_after) {
+        (Some(_), Some(until)) => {
+            until > now || is_held(c, id, now).await? || !trash_auto(c).await?
         }
-        (Some(_), _) => Err(Error::NotFound(id)),
-        _ => Err(invalid("id", "not in the trash")),
+        _ => return Err(invalid("id", "not in the trash")),
+    };
+    if !open {
+        return Err(Error::NotFound(id));
     }
+    let sql = "UPDATE objects SET rev = rev + 1, updated = ?, deleted = NULL, purge_after = NULL WHERE id = ?";
+    c.exec(sql, vec![int(now), id_value(id)]).await?;
+    Ok(Revision(s.rev + 1))
 }

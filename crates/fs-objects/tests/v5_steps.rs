@@ -46,15 +46,15 @@ fn broken<'a>(c: &'a Conn<'_>) -> StepFuture<'a> {
 }
 
 const STEPS: [Step; 2] = [Step::Create(&[ITEM]), Step::Code("counted", counted)];
-const DOMAIN: Domain = Domain {
-    prefix: "demo",
-    about: "demo",
-    tables: &[ITEM, COPY],
-    channels: &[],
-    children: &[],
-    expiries: &[],
-    steps: &STEPS,
-};
+const DOMAIN: Domain = Domain::new("demo", "demo", &[ITEM, COPY], &STEPS);
+
+/// A copy of the demo domain with other tables and steps (a `non_exhaustive` struct takes no `..` update).
+fn with(tables: &'static [Table], steps: &'static [Step]) -> Domain {
+    let mut d = DOMAIN;
+    d.tables = tables;
+    d.steps = steps;
+    d
+}
 
 async fn count(s: &Store, sql: &str) -> usize {
     s.read().await.query(sql, Vec::new()).await.unwrap().len()
@@ -85,7 +85,7 @@ async fn a_code_step_runs_once_however_many_register_at_the_same_time() {
 async fn a_code_step_that_fails_after_ddl_and_insert_leaves_nothing_behind() {
     let s = Store::open(":memory:", 0).await.unwrap();
     let steps: &'static [Step] = &[Step::Create(&[ITEM]), Step::Code("broken", broken)];
-    let d = Domain { steps, ..DOMAIN };
+    let d = with(DOMAIN.tables, steps);
     assert!(matches!(
         s.register_domain(&d, 1).await,
         Err(Error::Schema(_))
@@ -124,11 +124,7 @@ async fn reordered_inserted_or_changed_steps_are_found() {
         Step::Sql("DELETE FROM meta WHERE key = \'k1\'"),
         Step::Sql("DELETE FROM meta WHERE key = \'k2\'"),
     ];
-    let d = Domain {
-        tables: &[ITEM],
-        steps: sql,
-        ..DOMAIN
-    };
+    let d = with(&[ITEM], sql);
     s.register_domain(&d, 1).await.unwrap();
     for (label, steps) in [
         ("reordered", vec![sql[0], sql[2], sql[1]]),
@@ -149,11 +145,7 @@ async fn reordered_inserted_or_changed_steps_are_found() {
             ],
         ),
     ] {
-        let d = Domain {
-            tables: &[ITEM],
-            steps: Box::leak(steps.into_boxed_slice()),
-            ..DOMAIN
-        };
+        let d = with(&[ITEM], Box::leak(steps.into_boxed_slice()));
         let r = s.register_domain(&d, 2).await;
         assert!(
             matches!(r, Err(Error::StepMismatch { .. })),
@@ -170,9 +162,7 @@ async fn reordered_inserted_or_changed_steps_are_found() {
         ]
         .into_boxed_slice(),
     );
-    s.register_domain(&Domain { steps: more, ..d }, 4)
-        .await
-        .unwrap();
+    s.register_domain(&with(d.tables, more), 4).await.unwrap();
 }
 
 const BLOBBY: Table = Table {
@@ -186,16 +176,7 @@ const BLOBBY: Table = Table {
 async fn a_blob_or_an_undeclared_column_makes_the_registration_red() {
     let s = Store::open(":memory:", 0).await.unwrap();
     let steps: &'static [Step] = &[Step::Create(&[BLOBBY])];
-    let r = s
-        .register_domain(
-            &Domain {
-                tables: &[BLOBBY],
-                steps,
-                ..DOMAIN
-            },
-            1,
-        )
-        .await;
+    let r = s.register_domain(&with(&[BLOBBY], steps), 1).await;
     assert!(
         matches!(&r, Err(Error::Invalid(p)) if p[0].field == "demo_item.raw"),
         "{r:?}"
@@ -205,16 +186,7 @@ async fn a_blob_or_an_undeclared_column_makes_the_registration_red() {
         Step::Create(&[ITEM]),
         Step::Sql("ALTER TABLE demo_item ADD COLUMN raw BLOB"),
     ];
-    let r = s
-        .register_domain(
-            &Domain {
-                tables: &[ITEM],
-                steps,
-                ..DOMAIN
-            },
-            1,
-        )
-        .await;
+    let r = s.register_domain(&with(&[ITEM], steps), 1).await;
     assert!(
         matches!(r, Err(Error::Invalid(_))),
         "a column added by ALTER and not declared: {r:?}"
@@ -238,11 +210,7 @@ const LOG: Table = Table {
 async fn json_in_a_text_column_is_found_by_the_check_a_program_runs_in_its_step_test() {
     let s = Store::open(":memory:", 0).await.unwrap();
     let steps: &'static [Step] = &[Step::Create(&[LOG]), Step::Code("json_into", json_into)];
-    let d = Domain {
-        tables: &[LOG],
-        steps,
-        ..DOMAIN
-    };
+    let d = with(&[LOG], steps);
     s.register_domain(&d, 1).await.unwrap();
     assert_eq!(
         count(&s, "SELECT 1 FROM demo_log").await,

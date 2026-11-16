@@ -58,15 +58,7 @@ fn domain(n: usize) -> Domain {
         2 => &[ITEM],
         _ => &[ITEM, PART],
     };
-    Domain {
-        prefix: "demo",
-        about: "demo",
-        tables,
-        channels: &[],
-        children: &[],
-        expiries: &[],
-        steps: &STEPS[..n],
-    }
+    Domain::new("demo", "demo", tables, &STEPS[..n])
 }
 
 /// The rules of ADR 0086 over every table the engine knows.
@@ -177,15 +169,7 @@ async fn a_failing_step_changes_nothing_and_an_older_program_is_refused() {
         Step::Sql("ALTER TABLE demo_item ADD COLUMN broken NOPE NOPE NOPE"),
     ];
     let s = Store::open(":memory:", 0).await.unwrap();
-    let bad = Domain {
-        prefix: "demo",
-        about: "demo",
-        tables: &[ITEM_V1],
-        channels: &[],
-        children: &[],
-        expiries: &[],
-        steps: &BAD,
-    };
+    let bad = Domain::new("demo", "demo", &[ITEM_V1], &BAD);
     let r = s.register_domain(&bad, 1).await;
     assert!(matches!(r, Err(Error::Schema(m)) if m.contains("step 2")));
     let v = s

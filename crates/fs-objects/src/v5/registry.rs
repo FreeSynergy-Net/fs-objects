@@ -22,8 +22,10 @@ pub const RESERVED: [&str; 5] = ["object", "activity", "person", "fs", "setting"
 /// The reserved domain that holds the store's own tables.
 pub const OWN: &str = "fs_";
 
-/// Everything a program tells the store about its tables.
+/// Everything a program tells the store about its tables. `non_exhaustive`: build it with [`Domain::new`] and the
+/// `with_*` methods, so a field added later does not break the programs.
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub struct Domain {
     /// The table family: every table name starts with `<prefix>_`.
     pub prefix: &'static str,
@@ -39,6 +41,49 @@ pub struct Domain {
     pub expiries: &'static [Expiry],
     /// The ordered steps; the schema version is their number, only forward, only appended.
     pub steps: &'static [Step],
+}
+
+impl Domain {
+    /// A domain with its prefix, one line about it, its tables after the last step and its ordered steps; no channels,
+    /// no children, no expiries (add them with the `with_*` methods).
+    #[must_use]
+    pub const fn new(
+        prefix: &'static str,
+        about: &'static str,
+        tables: &'static [Table],
+        steps: &'static [Step],
+    ) -> Self {
+        Self {
+            prefix,
+            about,
+            tables,
+            channels: &[],
+            children: &[],
+            expiries: &[],
+            steps,
+        }
+    }
+
+    /// The channel names `object_origin.channel` may hold for this program.
+    #[must_use]
+    pub const fn with_channels(mut self, channels: &'static [&'static str]) -> Self {
+        self.channels = channels;
+        self
+    }
+
+    /// The dependent objects whose envelopes go with the object at the final delete.
+    #[must_use]
+    pub const fn with_children(mut self, children: &'static [Child]) -> Self {
+        self.children = children;
+        self
+    }
+
+    /// The tables with deadlines the period run removes.
+    #[must_use]
+    pub const fn with_expiries(mut self, expiries: &'static [Expiry]) -> Self {
+        self.expiries = expiries;
+        self
+    }
 }
 
 /// Create the registry and the store's own tables and register them under the reserved domain.

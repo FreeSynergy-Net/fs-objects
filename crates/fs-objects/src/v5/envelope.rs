@@ -9,6 +9,7 @@ use turso::Value;
 use super::codec::{get_int, get_opt_int, id_value, int, invalid, person_values, text};
 use super::conn::Conn;
 use super::error::{Error, Result};
+use super::hold::trash_auto;
 use super::registry::Domain;
 use super::tables::OBJECTS;
 
@@ -216,16 +217,17 @@ pub async fn delete_final(c: &Conn<'_>, d: &Domain, id: ObjectId) -> Result<()> 
     Ok(())
 }
 
-/// The ids of the objects whose trash period is over at `now`.
+/// The ids of the objects whose trash period is over at `now` and that no hold keeps (a hold keeps while it has no end
+/// or ends after `now`). Empty while `setting.trash_auto` is off ("never delete automatically").
 ///
 /// # Errors
 /// The engine's error, or a damaged row.
 pub async fn due(c: &Conn<'_>, now: i64) -> Result<Vec<ObjectId>> {
-    let rows = c
-        .query(
-            "SELECT id FROM objects WHERE purge_after IS NOT NULL AND purge_after <= ? ORDER BY id",
-            vec![int(now)],
-        )
-        .await?;
+    if !trash_auto(c).await? {
+        return Ok(Vec::new());
+    }
+    let sql = "SELECT id FROM objects WHERE purge_after IS NOT NULL AND purge_after <= ? AND NOT EXISTS \
+               (SELECT 1 FROM object_hold h WHERE h.object = objects.id AND (h.until IS NULL OR h.until > ?)) ORDER BY id";
+    let rows = c.query(sql, vec![int(now), int(now)]).await?;
     rows.iter().map(|r| super::codec::get_id(r, 0)).collect()
 }

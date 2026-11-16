@@ -37,19 +37,14 @@ pub const CUT: Table = Table {
 const STEPS: [Step; 1] = [Step::Create(&[NOTE, LINK, CUT])];
 
 pub fn domain(expiries: &'static [Expiry]) -> Domain {
-    Domain {
-        prefix: "demo",
-        about: "demo",
-        tables: &[NOTE, LINK, CUT],
-        channels: &["import", "carddav"],
-        children: &[Child {
+    Domain::new("demo", "demo", &[NOTE, LINK, CUT], &STEPS)
+        .with_channels(&["import", "carddav"])
+        .with_children(&[Child {
             table: "demo_link",
             parent: "master",
             object: "child",
-        }],
-        expiries,
-        steps: &STEPS,
-    }
+        }])
+        .with_expiries(expiries)
 }
 
 pub async fn store(expiries: &'static [Expiry]) -> Store {
