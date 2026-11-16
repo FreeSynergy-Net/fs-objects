@@ -180,6 +180,13 @@ async fn standard_sqlite_reads_the_store_file() {
         log(&c, o, Kind::Join, &actor(), T0, &[]).await.unwrap();
         c.finish(Ok(())).await.unwrap();
     }
+    // The finding that matters shows only with the `-wal` file beside the database (turso writes there without a
+    // checkpoint): the file is checked in place, never copied as a bare `.db`.
+    let wal = dir.join("store.db-wal");
+    assert!(
+        wal.exists(),
+        "no -wal file beside the database: the check would prove less than it says"
+    );
     let script = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/sqlite_check.py");
     match std::process::Command::new("python3")
         .args(["-I", script])
