@@ -74,10 +74,13 @@ async fn log_purge_keeps_the_object_and_final_delete_removes_everything() {
 }
 
 #[tokio::test]
-async fn v4_deleted_after_log_purge_has_no_before_image_and_no_row_to_hang_on() {
+async fn v4_deleted_then_log_purged_leaves_only_the_purged_entry_which_is_copied() {
     let c = mem().await;
     schema(&c).await;
-    // v4: delete activity gone with the log purge, object row gone: nothing is left to migrate, no trash row is created.
+    // v4 order "deleted, then log purged": no objects row, no activity, only the purged_objects entry.
+    // The migrator copies purged_objects as it is (no FK); nothing else is inserted.
+    run(&c, "INSERT INTO purged_objects VALUES ('gone')").await;
+    assert_eq!(count(&c, "purged_objects").await, 1);
     assert_eq!(count(&c, "objects").await + count(&c, "activity").await, 0);
     let orphan = c
         .execute(
@@ -87,7 +90,7 @@ async fn v4_deleted_after_log_purge_has_no_before_image_and_no_row_to_hang_on() 
         .await;
     assert!(
         orphan.is_err(),
-        "an activity without a parent row is refused: such a case is reported, not inserted"
+        "an activity without a parent row is refused"
     );
 }
 
