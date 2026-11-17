@@ -32,7 +32,7 @@ pub const REV: Table = Table {
 };
 
 /// Base (id 0, no name) + named profiles; a deleted profile stays as a tombstone (`deleted`, `name_key` NULL) so its id is never
-/// issued again (`top` = MAX(id)). `name` is what the person wrote (FreeText); `name_key` = `ProfileName` comparison form.
+/// issued again (`top` = MAX(id)). `name` is what the person wrote (`FreeText`); `name_key` = the `ProfileName` comparison form.
 pub const PROFILE: Table = Table {
     name: "settings_profile",
     cols: &[

@@ -5,6 +5,7 @@
 //! the rows. Times are `fs_types::Utc` (ms). Errors: `Error::Invalid` with `table.column` and a reason code, never a sentence.
 //! Written by Claude (Anthropic) as a probe; see CHANGELOG.
 
+mod batch;
 mod prim;
 mod rows;
 mod rows_index;
@@ -16,6 +17,7 @@ use fs_types::{ObjectId, Reference, Utc};
 
 use super::Store;
 
+pub use batch::SettingOp;
 pub use tables::{DOMAIN, PREFIX};
 
 /// A stored value: the three storage classes (no edge to fs-settings `Raw`; the server maps 1:1).

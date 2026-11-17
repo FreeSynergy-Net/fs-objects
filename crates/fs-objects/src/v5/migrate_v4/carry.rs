@@ -3,6 +3,8 @@
 //!
 //! Pattern: Specification (small independent rules: each says "carried" or gives the reason).
 
+use std::fmt::Write as _;
+
 use sha2::{Digest, Sha256};
 use turso::Value;
 
@@ -106,5 +108,8 @@ pub(super) async fn verify_extras(
 }
 
 fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    b.iter().fold(String::new(), |mut a, x| {
+        let _ = write!(a, "{x:02x}");
+        a
+    })
 }

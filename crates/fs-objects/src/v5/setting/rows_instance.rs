@@ -87,6 +87,49 @@ pub(super) async fn write_log(
     c.insert(&INSTANCE_LOG, row).await
 }
 
+/// `Changed` with the bumped revision, or `Same` with the unchanged one.
+pub(super) async fn outcome(c: &Conn<'_>, changed: bool) -> Result<Outcome> {
+    if changed {
+        Ok(Outcome::Changed {
+            rev: bump(c).await?,
+        })
+    } else {
+        Ok(Outcome::Same {
+            rev: revision(c).await?,
+        })
+    }
+}
+
+/// Set or clear a default inside a transaction; `true` = changed.
+pub(super) async fn put_instance_in(
+    c: &Conn<'_>,
+    key: &str,
+    v: Option<&Prim>,
+    a: Actor<'_>,
+    at: Utc,
+) -> Result<bool> {
+    let old = current(c, key).await?;
+    if old.as_ref() == v {
+        return Ok(false);
+    }
+    if locked(c, key).await?.is_some() {
+        return Err(invalid("settings_instance_lock.key", "locked"));
+    }
+    match v {
+        Some(p) => store_value(c, key, p, a, at).await?,
+        None => {
+            c.exec(
+                "DELETE FROM settings_instance_value WHERE key = ?",
+                vec![text(key)],
+            )
+            .await?;
+        }
+    }
+    let action = if v.is_some() { "set" } else { "clear" };
+    write_log(c, action, key, None, old.as_ref(), v, a, at).await?;
+    Ok(true)
+}
+
 fn log_row(r: &Row) -> Result<LogRow> {
     let action = get_text(r, 4)?;
     Ok(LogRow {
@@ -159,30 +202,8 @@ impl SettingRows<'_> {
     ) -> Result<Outcome> {
         let c = self.store.begin().await?;
         let r = async {
-            let old = current(&c, key).await?;
-            if old.as_ref() == v {
-                return Ok(Outcome::Same {
-                    rev: revision(&c).await?,
-                });
-            }
-            if locked(&c, key).await?.is_some() {
-                return Err(invalid("settings_instance_lock.key", "locked"));
-            }
-            match v {
-                Some(p) => store_value(&c, key, p, a, at).await?,
-                None => {
-                    c.exec(
-                        "DELETE FROM settings_instance_value WHERE key = ?",
-                        vec![text(key)],
-                    )
-                    .await?;
-                }
-            }
-            let action = if v.is_some() { "set" } else { "clear" };
-            write_log(&c, action, key, None, old.as_ref(), v, a, at).await?;
-            Ok(Outcome::Changed {
-                rev: bump(&c).await?,
-            })
+            let changed = put_instance_in(&c, key, v, a, at).await?;
+            outcome(&c, changed).await
         }
         .await;
         c.finish(r).await

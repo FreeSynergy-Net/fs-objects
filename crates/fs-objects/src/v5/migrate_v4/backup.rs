@@ -2,6 +2,7 @@
 //!
 //! Pattern: Transaction script (copy, then compare the SHA-256 of both files).
 
+use std::fmt::Write as _;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -72,7 +73,10 @@ pub fn fingerprint(path: &Path) -> Result<String> {
         h.update(b"\0wal\0");
         h.update(fs::read(&wal).map_err(|e| io("read the -wal file for the fingerprint", &e))?);
     }
-    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
+    Ok(h.finalize().iter().fold(String::new(), |mut a, b| {
+        let _ = write!(a, "{b:02x}");
+        a
+    }))
 }
 
 /// Copy the v4 file (and its `-wal` file when there is one) to `<file>.v4.bak` (numbered when taken) and verify it.

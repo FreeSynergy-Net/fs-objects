@@ -5,20 +5,84 @@
 use fs_types::{BasicValue, Utc};
 
 use super::SettingRows;
-use super::prim::{bump, revision};
-use super::rows_instance::{current, locked, store_value, write_log};
+use super::rows_instance::{current, locked, outcome, store_value, write_log};
 use super::{Actor, Outcome, Prim};
 use crate::v5::codec::{int, invalid, text};
+use crate::v5::conn::Conn;
 use crate::v5::error::Result;
 
 const REASON: &str = "settings_instance_lock.reason";
 
-fn need_reason(reason: &str) -> Result<()> {
+pub(super) fn need_reason(reason: &str) -> Result<()> {
     if reason.trim().is_empty() {
         Err(invalid(REASON, "reason-missing"))
     } else {
         Ok(())
     }
+}
+
+/// Lock inside a transaction; `true` = changed.
+pub(super) async fn lock_in(
+    c: &Conn<'_>,
+    key: &str,
+    v: &Prim,
+    reason: &str,
+    a: Actor<'_>,
+    at: Utc,
+) -> Result<bool> {
+    need_reason(reason)?;
+    let old = current(c, key).await?;
+    if let Some(held) = locked(c, key).await? {
+        if old.as_ref() == Some(v) && held == reason {
+            return Ok(false);
+        }
+        return Err(invalid("settings_instance_lock.key", "locked"));
+    }
+    store_value(c, key, v, a, at).await?;
+    c.insert(
+        &super::tables::INSTANCE_LOCK,
+        vec![
+            text(key),
+            text(reason),
+            text(&a.by.canonical()),
+            int(at.millis()),
+        ],
+    )
+    .await?;
+    write_log(c, "lock", key, Some(reason), old.as_ref(), Some(v), a, at).await?;
+    Ok(true)
+}
+
+/// Unlock inside a transaction; `true` = changed.
+pub(super) async fn unlock_in(
+    c: &Conn<'_>,
+    key: &str,
+    reason: &str,
+    a: Actor<'_>,
+    at: Utc,
+) -> Result<bool> {
+    need_reason(reason)?;
+    if locked(c, key).await?.is_none() {
+        return Ok(false);
+    }
+    let value = current(c, key).await?;
+    c.exec(
+        "DELETE FROM settings_instance_lock WHERE key = ?",
+        vec![text(key)],
+    )
+    .await?;
+    write_log(
+        c,
+        "unlock",
+        key,
+        Some(reason),
+        value.as_ref(),
+        value.as_ref(),
+        a,
+        at,
+    )
+    .await?;
+    Ok(true)
 }
 
 impl SettingRows<'_> {
@@ -39,30 +103,8 @@ impl SettingRows<'_> {
         need_reason(reason)?;
         let c = self.store.begin().await?;
         let r = async {
-            let old = current(&c, key).await?;
-            if let Some(held) = locked(&c, key).await? {
-                if old.as_ref() == Some(v) && held == reason {
-                    return Ok(Outcome::Same {
-                        rev: revision(&c).await?,
-                    });
-                }
-                return Err(invalid("settings_instance_lock.key", "locked"));
-            }
-            store_value(&c, key, v, a, at).await?;
-            c.insert(
-                &super::tables::INSTANCE_LOCK,
-                vec![
-                    text(key),
-                    text(reason),
-                    text(&a.by.canonical()),
-                    int(at.millis()),
-                ],
-            )
-            .await?;
-            write_log(&c, "lock", key, Some(reason), old.as_ref(), Some(v), a, at).await?;
-            Ok(Outcome::Changed {
-                rev: bump(&c).await?,
-            })
+            let changed = lock_in(&c, key, v, reason, a, at).await?;
+            outcome(&c, changed).await
         }
         .await;
         c.finish(r).await
@@ -76,31 +118,8 @@ impl SettingRows<'_> {
         need_reason(reason)?;
         let c = self.store.begin().await?;
         let r = async {
-            if locked(&c, key).await?.is_none() {
-                return Ok(Outcome::Same {
-                    rev: revision(&c).await?,
-                });
-            }
-            let value = current(&c, key).await?;
-            c.exec(
-                "DELETE FROM settings_instance_lock WHERE key = ?",
-                vec![text(key)],
-            )
-            .await?;
-            write_log(
-                &c,
-                "unlock",
-                key,
-                Some(reason),
-                value.as_ref(),
-                value.as_ref(),
-                a,
-                at,
-            )
-            .await?;
-            Ok(Outcome::Changed {
-                rev: bump(&c).await?,
-            })
+            let changed = unlock_in(&c, key, reason, a, at).await?;
+            outcome(&c, changed).await
         }
         .await;
         c.finish(r).await

@@ -126,37 +126,9 @@ impl<'s> SettingRows<'s> {
         w: Writer<'_>,
         at: Utc,
     ) -> Result<i64> {
-        let (s, program) = scope_words(scope);
         let c = self.store.begin().await?;
         let r = async {
-            live(&c, profile, "settings_value.profile").await?;
-            let locked = c
-                .query(
-                    "SELECT 1 FROM settings_instance_lock WHERE key = ?",
-                    vec![text(key)],
-                )
-                .await?;
-            if !locked.is_empty() {
-                return Err(invalid("settings_value.key", "locked"));
-            }
-            let pk = vec![int(profile), text(s), text(program), text(place_word(place)), text(key)];
-            match v {
-                None => {
-                    c.exec(
-                        "DELETE FROM settings_value WHERE profile = ? AND scope = ? AND program = ? AND place = ? AND key = ?",
-                        pk,
-                    )
-                    .await?;
-                }
-                Some(p) => {
-                    let [k, i, t] = cols(Some(p));
-                    let mut row = pk;
-                    row.extend([k, i, t, int(at.millis())]);
-                    row.push(opt_text(w.by.map(BasicValue::canonical).as_deref()));
-                    row.push(opt_text(w.via));
-                    upsert_value(&c, &VALUE, row).await?;
-                }
-            }
+            put_in(&c, profile, scope, place, key, v, w, at).await?;
             bump(&c).await
         }
         .await;
@@ -168,20 +140,95 @@ impl<'s> SettingRows<'s> {
     /// # Errors
     /// `Invalid` `settings_value.profile` `unknown`; the engine's.
     pub async fn clear_profile(&self, profile: i64, scope: ScopeRow<'_>, _at: Utc) -> Result<i64> {
-        let (s, program) = scope_words(scope);
         let c = self.store.begin().await?;
         let r = async {
-            live(&c, profile, "settings_value.profile").await?;
-            c.exec(
-                "DELETE FROM settings_value WHERE profile = ? AND scope = ? AND program = ?",
-                vec![int(profile), text(s), text(program)],
-            )
-            .await?;
+            clear_in(&c, profile, scope).await?;
             bump(&c).await
         }
         .await;
         c.finish(r).await
     }
+
+    /// The programs that have at least one value (for an export), by name.
+    ///
+    /// # Errors
+    /// The engine's.
+    pub async fn programs(&self) -> Result<Vec<String>> {
+        let rows = self
+            .store
+            .read()
+            .await
+            .query(
+                "SELECT DISTINCT program FROM settings_value WHERE scope = 'program' ORDER BY program",
+                Vec::new(),
+            )
+            .await?;
+        rows.iter()
+            .map(|r| crate::v5::codec::get_text(r, 0))
+            .collect()
+    }
+}
+
+/// One person value inside a transaction.
+#[allow(clippy::too_many_arguments)]
+pub(super) async fn put_in(
+    c: &Conn<'_>,
+    profile: i64,
+    scope: ScopeRow<'_>,
+    place: PlaceRow,
+    key: &str,
+    v: Option<&Prim>,
+    w: Writer<'_>,
+    at: Utc,
+) -> Result<()> {
+    let (s, program) = scope_words(scope);
+    live(c, profile, "settings_value.profile").await?;
+    let locked = c
+        .query(
+            "SELECT 1 FROM settings_instance_lock WHERE key = ?",
+            vec![text(key)],
+        )
+        .await?;
+    if !locked.is_empty() {
+        return Err(invalid("settings_value.key", "locked"));
+    }
+    let pk = vec![
+        int(profile),
+        text(s),
+        text(program),
+        text(place_word(place)),
+        text(key),
+    ];
+    match v {
+        None => {
+            c.exec(
+                "DELETE FROM settings_value WHERE profile = ? AND scope = ? AND program = ? AND place = ? AND key = ?",
+                pk,
+            )
+            .await?;
+        }
+        Some(p) => {
+            let [k, i, t] = cols(Some(p));
+            let mut row = pk;
+            row.extend([k, i, t, int(at.millis())]);
+            row.push(opt_text(w.by.map(BasicValue::canonical).as_deref()));
+            row.push(opt_text(w.via));
+            upsert_value(c, &VALUE, row).await?;
+        }
+    }
+    Ok(())
+}
+
+/// Remove the values of a profile in a scope inside a transaction.
+pub(super) async fn clear_in(c: &Conn<'_>, profile: i64, scope: ScopeRow<'_>) -> Result<()> {
+    let (s, program) = scope_words(scope);
+    live(c, profile, "settings_value.profile").await?;
+    c.exec(
+        "DELETE FROM settings_value WHERE profile = ? AND scope = ? AND program = ?",
+        vec![int(profile), text(s), text(program)],
+    )
+    .await
+    .map(|_| ())
 }
 
 async fn upsert_value(c: &Conn<'_>, t: &Table, row: Vec<turso::Value>) -> Result<()> {

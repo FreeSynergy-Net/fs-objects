@@ -54,7 +54,7 @@ async fn name_taken(c: &Conn<'_>, key: &str, except: i64) -> Result<bool> {
     Ok(!rows.is_empty())
 }
 
-async fn apply(c: &Conn<'_>, ch: &IndexChange, at: Utc) -> Result<()> {
+pub(super) async fn apply(c: &Conn<'_>, ch: &IndexChange, at: Utc) -> Result<()> {
     match ch {
         IndexChange::Create { id, name, name_key } => {
             let top = read(c).await?.top;
