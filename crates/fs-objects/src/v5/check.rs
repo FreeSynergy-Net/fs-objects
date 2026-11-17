@@ -40,6 +40,8 @@ pub const REF_WITHOUT_FK: &[(&str, &str)] = &[
     ("activity", "target"),
     ("purged_objects", "object_id"),
     ("unlogged_ids", "object_id"),
+    // The device of the active profile is this store's own `meta.store_id` (not an object, no table to point at).
+    ("settings_active", "device"),
 ];
 
 /// Core columns that hold text a person wrote (the object name and its sort key, the logged old and new text of any field): they

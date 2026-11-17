@@ -41,6 +41,16 @@ pub enum Error {
         /// The domain that was refused.
         new: String,
     },
+    /// The store was written by a newer program: it has more steps of `domain` than this program knows. Nothing was changed.
+    #[error("{domain} is at schema version {found} in this store, this program knows {known}")]
+    Newer {
+        /// The domain prefix.
+        domain: String,
+        /// The version (number of steps) the store has.
+        found: usize,
+        /// The version (number of steps) this program knows.
+        known: usize,
+    },
     /// A schema step or a registration failed; the store is as it was before that step.
     #[error("schema: {0}")]
     Schema(String),
