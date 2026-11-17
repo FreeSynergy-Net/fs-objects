@@ -148,6 +148,18 @@ async fn ka7_a_closure_error_changes_nothing() {
     assert_eq!(out, Err("no"));
     assert_eq!(r.rev().await.unwrap(), rev);
     assert_eq!(r.index().await.unwrap(), before);
+    // A change that fails after another one was applied rolls the first back too (all or nothing).
+    let res = change(&r, 4, vec![create(2, "Talk"), create(2, "Other")]).await;
+    assert!(
+        invalid_is(&res, "settings_profile.id", "id-invalid"),
+        "{res:?}"
+    );
+    assert_eq!(r.rev().await.unwrap(), rev);
+    assert_eq!(
+        r.index().await.unwrap(),
+        before,
+        "the first change is not kept"
+    );
     // The closure sees the index as stored now, inside the transaction.
     let out = r
         .change_index::<()>(at(4), &mut |i| Ok(vec![create(i.top + 1, "Talk")]))
