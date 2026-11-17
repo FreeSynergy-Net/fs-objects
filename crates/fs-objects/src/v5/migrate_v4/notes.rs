@@ -17,7 +17,7 @@ use crate::v5::codec::{get_int, get_opt_int, get_text, id_value, int, opt_int, t
 use crate::v5::id::from_v4;
 use crate::v5::log::FieldChange;
 use crate::v5::log_codec::LogValue;
-use crate::v5::spec::Logical::{Bool, Int, Ref, Text, Utc};
+use crate::v5::spec::Logical::{Bool, FreeText, Int, Ref, Utc};
 use crate::v5::{Col, Conn, Domain, Result, Step, Table};
 
 /// One note.
@@ -25,8 +25,8 @@ pub const NOTE: Table = Table {
     name: "notes_note",
     cols: &[
         Col::req("object", Ref),
-        Col::req("title", Text),
-        Col::req("body", Text),
+        Col::req("title", FreeText),
+        Col::req("body", FreeText),
         Col::req("pinned", Bool),
         Col::opt("due", Utc),
     ],
@@ -43,7 +43,7 @@ pub const TAG: Table = Table {
     cols: &[
         Col::req("object", Ref),
         Col::req("seq", Int),
-        Col::req("tag", Text),
+        Col::req("tag", FreeText),
     ],
     constraints: &[
         "PRIMARY KEY (object, seq)",

@@ -7,6 +7,9 @@
 pub enum Logical {
     /// A whole number.
     Int,
+    /// Text that a person wrote (a name, a body, a note): any characters are valid, also `[1,2]` or `{}`. Stored as
+    /// `TEXT`; `check::typed` does not look for JSON in it (the heuristic would raise a false alarm).
+    FreeText,
     /// A finite floating-point number.
     Real,
     /// Text.
@@ -50,6 +53,7 @@ impl Logical {
             Self::Int => "int",
             Self::Real => "real",
             Self::Text => "text",
+            Self::FreeText => "free_text",
             Self::Bool => "bool",
             Self::Utc => "utc",
             Self::Local => "local",

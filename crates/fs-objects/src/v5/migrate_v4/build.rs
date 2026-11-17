@@ -8,6 +8,7 @@ use std::time::Instant;
 use fs_types::{BasicValue, PersonArt, PersonRef, Reference};
 use turso::Value;
 
+use super::carry::{ORIGINAL_TABLE, not_carried, original_row, verify_extras};
 use super::convert::{Converted, Converter};
 use super::report::{Held, Report};
 use crate::v5::codec::{id_text, id_value, int, invalid, opt_text, parse_id, text};
@@ -44,24 +45,6 @@ fn ref_col(what: &str, v: Option<&String>) -> std::result::Result<Value, String>
             "{what} is not an object id (v5 stores a reference): {s}"
         )),
     }
-}
-
-/// What the scaffold cannot carry yet: holds the object with a reason instead of dropping the data.
-fn not_carried(o: &StoredObject) -> Option<&'static str> {
-    let e = &o.envelope;
-    if [&e.to, &e.cc, &e.bto, &e.bcc, &e.audience]
-        .iter()
-        .any(|l| !l.is_empty())
-    {
-        return Some("addressing is not carried yet (tables object_addressing follow)");
-    }
-    if !e.sensitive.is_empty() {
-        return Some("protection categories are not carried yet (table object_protection follows)");
-    }
-    if o.original.is_some() {
-        return Some("the original is not carried by the scaffold yet");
-    }
-    None
 }
 
 /// The envelope row of the new file plus the values to compare after the round trip.
@@ -151,6 +134,9 @@ async fn one(
         }
         let at = expect[4].clone();
         let now = if let Value::Integer(n) = at { n } else { 0 };
+        if let Some(row) = original_row(o, now) {
+            c.insert(ORIGINAL_TABLE, row).await?;
+        }
         log(&c, id, Kind::Create, &who, now, &conv_out.changes).await?;
         verify(&c, conv, o, &expect).await
     }
@@ -183,6 +169,9 @@ async fn verify(
             "the envelope read back differs from the v4 envelope",
         ));
     }
+    if let Err(why) = verify_extras(c, conv, o).await {
+        return Err(invalid("roundtrip.extras", &why));
+    }
     let got = conv.export(c, id).await?;
     if got != conv.normalize(&o.content) {
         return Err(invalid(
@@ -210,8 +199,8 @@ pub(super) async fn build(
     for o in all {
         let kind = o.envelope.object_type.clone();
         let id = id_text(from_v4(o.envelope.id));
-        let verdict = if let Some(why) = not_carried(&o) {
-            Outcome::Held(why.to_owned())
+        let verdict = if let Some(why) = not_carried(&o, conv) {
+            Outcome::Held(why)
         } else if !conv.handles(&kind) {
             Outcome::Held(format!("no converter for the type {kind}"))
         } else {

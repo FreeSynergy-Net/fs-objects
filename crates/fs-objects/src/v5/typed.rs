@@ -40,7 +40,7 @@ fn check_inner(t: &Table, c: &Col, v: &Value) -> Result<()> {
     match (c.logical, v) {
         (Logical::Int | Logical::Utc, Value::Integer(_))
         | (Logical::Bool, Value::Integer(0 | 1))
-        | (Logical::Text, Value::Text(_))
+        | (Logical::Text | Logical::FreeText, Value::Text(_))
         | (Logical::Blob, Value::Blob(_)) => Ok(()),
         (Logical::Bool, _) => bad("must be 0 or 1"),
         (Logical::Real, Value::Real(f)) if f.is_finite() => Ok(()),
