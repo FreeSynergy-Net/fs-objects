@@ -2,6 +2,22 @@
 
 Version = tag.
 
+## Unreleased
+
+Why: the settings of a person and of an instance move from files into the database (ADR 0100, ADR 0086 addendum; PLAN `speicher-schnittstelle`). This is part A of that round: the typed tables and the row functions in this crate; the program `fs-settings` (parts B and C) builds on them. Written by Claude (Anthropic) as a probe; waits for review.
+
+- `v5::setting` (feature `v5`): the table family `settings_*`, schema version 5 (five steps): `settings_rev`, `settings_profile` (base = id 0; a deleted profile stays as a tombstone, its name is free again, its id is never issued again), `settings_active` (the active profile of this device), `settings_value` (typed: `kind` bool/int/text with `v_int`/`v_text` and a `CHECK` per kind, no JSON, no blob), `settings_instance_value`, `settings_instance_lock` (a lock never exists without its value; reason mandatory), `settings_instance_log` (append-only by triggers).
+- `v5::setting::SettingRows`: `open`, `new`, `rev`, `values`, `put`, `clear_profile`, `index`, `change_index` (read-change-write in ONE transaction; an error of the closure changes nothing), `instance`, `put_instance` (idempotent: `Outcome::Same`), `lock`, `unlock` (reason mandatory, c0 decision 6), `log`. Every write is one transaction with `rev + 1`. Refusals are `Error::Invalid` with `table.column` and a reason code (`unknown`, `id-invalid`, `exists`, `locked`, `reason-missing`).
+- `Store::inspect(path, domain) -> Inspect::{Absent, Fits, Newer, Broken}`: looks at a store file WITHOUT changing it (works on a throw-away copy in a folder beside the file that is removed again; the file, its length, its modification time and its folder stay the same).
+- New `Error::Newer { domain, found, known }` (additive; `Error` is `non_exhaustive`): a store with more steps than the program knows. Before, this was `Error::Schema` with a sentence.
+- `cargo fmt --all` on the v0.0.8 base (import order, line breaks) in a separate commit.
+- Auf Deutsch: Warum: die Einstellungen einer Person und einer Instanz ziehen aus Dateien in die Datenbank (ADR 0100). Das ist Teil A dieser Runde: typisierte Tabellen und Zeilenfunktionen in diesem Crate; das Programm `fs-settings` (Teile B und C) baut darauf auf. Von Claude (Anthropic) als Probe geschrieben; wartet auf die Pruefung.
+- `v5::setting` (Feature `v5`): Tabellenfamilie `settings_*`, Schema-Version 5 (fuenf Schritte): Zaehler, Profile (Basis = Id 0; ein geloeschtes Profil bleibt als Grabstein, sein Name wird frei, seine Id nie wieder vergeben), aktives Profil des Geraets, Werte (typisiert: Art bool/int/text mit `CHECK` je Art, kein JSON, kein Blob), Instanz-Vorgaben, Schloesser (nie ohne Wert; Grund Pflicht) und ein Instanz-Protokoll, das per Trigger nur angehaengt werden kann.
+- `SettingRows`: Werte lesen/schreiben, Profil-Index in EINER Transaktion aendern (`change_index`; Fehler der Closure aendert nichts), Instanz-Vorgaben idempotent (`Outcome::Same`), `lock`/`unlock` (Grund Pflicht), `log`. Jedes Schreiben = eine Transaktion mit `rev + 1`; Ablehnungen als `Error::Invalid` mit `table.column` und Grund-Code.
+- `Store::inspect`: schaut eine Store-Datei an, OHNE sie zu veraendern (Arbeit an einer Wegwerf-Kopie in einem Ordner neben der Datei, danach entfernt); Datei, Laenge, Aenderungszeit und Ordner bleiben gleich.
+- Neu `Error::Newer { domain, found, known }` (additiv): ein Store mit mehr Schritten, als das Programm kennt (vorher `Error::Schema` mit einem Satz).
+- `cargo fmt --all` auf dem v0.0.8-Stand (Importreihenfolge, Zeilenumbrueche) in einem eigenen Commit.
+
 ## 0.0.8
 
 Why: the migration scaffold of the untagged v0.0.7 could, by its first review (Opus, conditions 1 to 6), still hurt a person's data in rare cases (it opened the v4 file read-write, it could run while the program wrote to it, it left a half-built file after an error, it let the fall-back give up work silently, it dropped envelope times without saying so). This version closes those holes before any real converter is written; data safety comes first. v0.0.7 was never tagged: its content is listed here too.
