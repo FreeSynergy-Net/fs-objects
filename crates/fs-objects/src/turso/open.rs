@@ -12,7 +12,8 @@ use super::TursoStore;
 use super::activities::last_activity_id;
 use super::encryption;
 use super::identity::read_identity;
-use super::migration::migrate;
+use super::migration::{detect_version, migrate};
+use super::schema::SCHEMA_VERSION;
 use super::options::OpenOptions;
 use super::store::Inner;
 use crate::{Error, Result};
@@ -29,7 +30,21 @@ impl TursoStore {
             .as_ref()
             .to_str()
             .ok_or_else(|| Error::Invalid("path is not UTF-8".into()))?;
-        Self::open_raw(p, opts).await
+        Self::open_raw(p, opts, false).await
+    }
+
+    /// Open a file ONLY for reading (the engine opens it without write access) and refuse it unless its schema
+    /// version is exactly the current one. Nothing is migrated, no identity is made: the file is never written
+    /// (the migration to v5 reads its v4 source through this, ADR 0086). The file must exist.
+    ///
+    /// # Errors
+    /// `Backend` when the file is no store, is empty, has another schema version, or cannot be opened.
+    pub async fn open_read_only(path: impl AsRef<Path>, opts: OpenOptions) -> Result<Self> {
+        let p = path
+            .as_ref()
+            .to_str()
+            .ok_or_else(|| Error::Invalid("path is not UTF-8".into()))?;
+        Self::open_raw(p, opts, true).await
     }
 
     /// Volatile in-memory store (tests, caches).
@@ -38,17 +53,28 @@ impl TursoStore {
             allow_sensitive_unencrypted: true,
             ..OpenOptions::default()
         };
-        Self::open_raw(":memory:", o).await
+        Self::open_raw(":memory:", o, false).await
     }
 
-    async fn open_raw(path: &str, opts: OpenOptions) -> Result<Self> {
+    async fn open_raw(path: &str, opts: OpenOptions, read_only: bool) -> Result<Self> {
         let (b, encrypted) = encryption::configure(
-            turso::Builder::new_local(path).experimental_vacuum(true),
+            turso::Builder::new_local(path)
+                .experimental_vacuum(true)
+                .read_only(read_only),
             &opts,
         )?;
         let db = b.build().await?;
         let conn = db.connect()?;
-        migrate(&conn).await?;
+        if read_only {
+            let found = detect_version(&conn).await?;
+            if found != SCHEMA_VERSION {
+                return Err(Error::Backend(format!(
+                    "the file has schema version {found}, expected {SCHEMA_VERSION}: it is not opened"
+                )));
+            }
+        } else {
+            migrate(&conn).await?;
+        }
         let identity = read_identity(&conn).await?;
         let last_activity = last_activity_id(&conn).await?;
         let (tx, _) = broadcast::channel(opts.subscribe_capacity.max(1));

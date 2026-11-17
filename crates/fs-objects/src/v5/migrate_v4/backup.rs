@@ -32,6 +32,7 @@ fn sha(path: &Path) -> Result<Vec<u8>> {
     Ok(Sha256::digest(&bytes).to_vec())
 }
 
+/// Copy to a NEW file. A copy that fails after it was created is removed again (it is this run's own file).
 fn copy_new(from: &Path, to: &Path) -> Result<()> {
     let bytes = fs::read(from).map_err(|e| io("read the v4 file", &e))?;
     let mut f = fs::OpenOptions::new()
@@ -39,15 +40,39 @@ fn copy_new(from: &Path, to: &Path) -> Result<()> {
         .create_new(true)
         .open(to)
         .map_err(|e| io("create the backup (never overwrites)", &e))?;
-    f.write_all(&bytes)
+    let done = f
+        .write_all(&bytes)
         .and_then(|()| f.sync_all())
-        .map_err(|e| io("write the backup", &e))?;
-    if sha(from)? != sha(to)? {
-        return Err(Error::Unavailable(
-            "the backup differs from the v4 file".into(),
-        ));
+        .map_err(|e| io("write the backup", &e))
+        .and_then(|()| {
+            if sha(from)? == sha(to)? {
+                Ok(())
+            } else {
+                Err(Error::Unavailable(
+                    "the backup differs from the v4 file".into(),
+                ))
+            }
+        });
+    if done.is_err() {
+        let _ = fs::remove_file(to);
     }
-    Ok(())
+    done
+}
+
+/// SHA-256 (hex) over the file and, when there is one, its `-wal` file: what a person or a program changed in a
+/// store file shows here, also while the change still sits in the `-wal` file.
+///
+/// # Errors
+/// `Unavailable` when a file cannot be read.
+pub fn fingerprint(path: &Path) -> Result<String> {
+    let mut h = Sha256::new();
+    h.update(fs::read(path).map_err(|e| io("read for the fingerprint", &e))?);
+    let wal = PathBuf::from(format!("{}-wal", path.display()));
+    if wal.is_file() {
+        h.update(b"\0wal\0");
+        h.update(fs::read(&wal).map_err(|e| io("read the -wal file for the fingerprint", &e))?);
+    }
+    Ok(h.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
 /// Copy the v4 file (and its `-wal` file when there is one) to `<file>.v4.bak` (numbered when taken) and verify it.
@@ -58,8 +83,11 @@ pub fn backup_file(v4: &Path) -> Result<PathBuf> {
     let to = unique_sibling(v4, ".v4.bak");
     copy_new(v4, &to)?;
     let wal = PathBuf::from(format!("{}-wal", v4.display()));
-    if wal.exists() {
-        copy_new(&wal, &PathBuf::from(format!("{}-wal", to.display())))?;
+    if wal.exists()
+        && let Err(e) = copy_new(&wal, &PathBuf::from(format!("{}-wal", to.display())))
+    {
+        let _ = fs::remove_file(&to);
+        return Err(e);
     }
     Ok(to)
 }
