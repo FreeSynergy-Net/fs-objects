@@ -1,8 +1,10 @@
 //! Teil A, `Store::inspect`: K-case KA13 (looking at a file changes nothing: bytes, length, mtime, folder).
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 
+use std::fmt::Write as _;
 use std::path::Path;
 
 use common_setting::{DOMAIN6, at, dir, file};
@@ -18,8 +20,10 @@ fn print(p: &Path) -> (String, u64, Option<std::time::SystemTime>, Vec<String>) 
         Ok(m) if m.is_file() => (
             Sha256::digest(std::fs::read(p).unwrap())
                 .iter()
-                .map(|b| format!("{b:02x}"))
-                .collect::<String>(),
+                .fold(String::new(), |mut a, b| {
+                    let _ = write!(a, "{b:02x}");
+                    a
+                }),
             m.len(),
             m.modified().ok(),
         ),

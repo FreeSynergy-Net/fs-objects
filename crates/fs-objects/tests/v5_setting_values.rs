@@ -1,5 +1,6 @@
 //! Teil A, `settings_value`: K-cases KA3, KA4, KA5, KA11, KA14.
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 

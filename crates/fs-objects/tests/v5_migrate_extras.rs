@@ -222,7 +222,7 @@ async fn the_original_is_carried_byte_for_byte_and_compared() {
         rows[0][2],
         turso::Value::Text(fs_objects::v5::original::sha256_hex(&bytes))
     );
-    assert!(typed(&v5).await.unwrap().is_empty());
+    assert_eq!(typed(&v5).await.unwrap().len(), 0);
 }
 
 #[tokio::test]

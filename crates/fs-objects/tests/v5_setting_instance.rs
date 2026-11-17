@@ -1,5 +1,6 @@
 //! Teil A, the instance layer: K-cases KA9, KA10.
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 

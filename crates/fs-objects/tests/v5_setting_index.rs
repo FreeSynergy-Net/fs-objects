@@ -1,5 +1,6 @@
 //! Teil A, `settings_profile` / `settings_active`: K-cases KA6, KA7, KA8, KA17.
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 

@@ -1,5 +1,6 @@
 //! Teil A, batch and program list: K-cases KA18 to KA21.
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 

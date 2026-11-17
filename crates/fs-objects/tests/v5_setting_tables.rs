@@ -1,5 +1,6 @@
 //! Teil A, the table family and its registration: K-cases KA1, KA2, KA12, KA15, KA16.
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 
@@ -17,6 +18,17 @@ const TASKS: Table = Table {
     indexes: &[],
 };
 const TASKS_DOMAIN: Domain = Domain::new("tasks", "t", &[TASKS], &[Step::Create(&[TASKS])]);
+
+const CHANGED: [Step; 5] = [
+    STEPS[0],
+    Step::Sql(
+        "CREATE TRIGGER settings_instance_log_no_update BEFORE UPDATE ON settings_instance_log BEGIN SELECT RAISE(ABORT, 'other'); END",
+    ),
+    STEPS[2],
+    STEPS[3],
+    STEPS[4],
+];
+const OTHER: Domain = Domain::new("settings", "x", &ALL, &CHANGED);
 
 async fn rows(s: &Store, sql: &str) -> Vec<Vec<turso::Value>> {
     s.read().await.query(sql, Vec::new()).await.unwrap()
@@ -110,16 +122,6 @@ async fn ka12_newer_store_and_changed_step() {
     );
     let s = Store::open(":memory:", 0).await.unwrap();
     s.register_domain(&DOMAIN, 1).await.unwrap();
-    const CHANGED: [Step; 5] = [
-        STEPS[0],
-        Step::Sql(
-            "CREATE TRIGGER settings_instance_log_no_update BEFORE UPDATE ON settings_instance_log BEGIN SELECT RAISE(ABORT, 'other'); END",
-        ),
-        STEPS[2],
-        STEPS[3],
-        STEPS[4],
-    ];
-    const OTHER: Domain = Domain::new("settings", "x", &ALL, &CHANGED);
     assert_eq!(
         s.register_domain(&OTHER, 2).await,
         Err(Error::StepMismatch {
