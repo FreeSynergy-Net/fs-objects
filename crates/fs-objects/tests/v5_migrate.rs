@@ -189,7 +189,14 @@ async fn a_failing_step_changes_nothing_and_an_older_program_is_refused() {
     s.register_domain(&domain(2), 3).await.unwrap();
     let old = s.register_domain(&domain(1), 4).await;
     assert!(
-        matches!(old, Err(Error::Schema(m)) if m.contains("version 2")),
+        matches!(
+            old,
+            Err(Error::Newer {
+                found: 2,
+                known: 1,
+                ..
+            })
+        ),
         "the store is newer than the program"
     );
 }
