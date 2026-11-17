@@ -151,11 +151,11 @@ pub(super) async fn register(store: &Store, d: &Domain, now: i64) -> Result<()> 
 async fn run(store: &Store, d: &Domain, now: i64) -> Result<()> {
     let have = version(&store.read().await, d.prefix).await?;
     if have > d.steps.len() {
-        return Err(Error::Schema(format!(
-            "store schema of {} is version {have}, this program knows {}",
-            d.prefix,
-            d.steps.len()
-        )));
+        return Err(Error::Newer {
+            domain: d.prefix.to_owned(),
+            found: have,
+            known: d.steps.len(),
+        });
     }
     check_prints(&store.read().await, d, have).await?;
     for (i, step) in d.steps.iter().enumerate().skip(have) {
