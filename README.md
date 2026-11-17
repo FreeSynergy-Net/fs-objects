@@ -21,6 +21,7 @@ Latest tag: `v0.0.6`.
 
 ## What is not there yet
 
+- Migration v4 to v5 is a scaffold (`v5::migrate_v4`: backup, new file, per-program converter, round trip, report, switch after a person confirms); no program has a real converter yet, and the v4 activity history, addressing, protection and the original are not carried over yet (held back or reported). `v5::check::typed` checks a v5 file against ADR 0086.
 - No key vault, so keys come from the caller.
 - Search is substring and prefix only; full-text search is not switched on.
 - No remote (HTTPS) store. Large originals are a draft and answer "not supported".

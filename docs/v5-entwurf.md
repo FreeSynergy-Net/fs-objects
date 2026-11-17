@@ -253,6 +253,8 @@ Goals: nothing is lost silently, the old file stays until a human deletes it, th
 11. **Swap** only after the person confirms: the v5 file becomes the store, the v4 file and its `.bak` stay.
 12. **Dependents.** `rev` changes meaning (counter instead of hash): frontends and caches re-read after the migration. Programs that read `start_time`/`end_time` of the envelope (fs-calendar) change in their own migration step.
 
+> Build state v0.0.7: the scaffold of this section exists as `v5::migrate_v4` (steps 1, 2 for the envelope, 3 through a `Converter`, 7, 8, 10, 11 and the fall-back of 7; the resumable table of step 9 and the activities of step 6, addressing/protection of step 4 and the original of step 5 are not built yet) and `v5::check::typed` (R14).
+
 ## 8. What the engine does, measured
 
 `crates/fs-objects/tests/v5_probe.rs`, `v5_probe_keys.rs`, `v5_probe_delete.rs`, `v5_probe_trash.rs` and `v5_probe_migrate.rs` (turso `=0.8.3`; in-memory connections, one probe on a file in the

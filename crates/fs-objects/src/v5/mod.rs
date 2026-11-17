@@ -9,6 +9,7 @@
 
 #![allow(clippy::many_single_char_names)]
 
+pub mod check;
 pub mod codec;
 pub mod conn;
 pub mod envelope;
@@ -20,6 +21,7 @@ pub mod id;
 pub mod log;
 pub mod log_codec;
 pub mod migrate;
+pub mod migrate_v4;
 pub mod original;
 pub mod own;
 pub mod purge;
