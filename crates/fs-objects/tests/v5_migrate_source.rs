@@ -59,7 +59,11 @@ async fn only_a_v4_file_is_accepted_and_a_refused_file_stays_byte_for_byte() {
     refused(&de, &pe, "objects.db").await;
     let df = Dir::new("fs-objects-src-foreign");
     let pf = df.file("objects.db");
-    std::fs::write(&pf, b"this is a letter to my aunt, not a database\n".repeat(200)).unwrap();
+    std::fs::write(
+        &pf,
+        b"this is a letter to my aunt, not a database\n".repeat(200),
+    )
+    .unwrap();
     refused(&df, &pf, "objects.db").await;
     // A real v5 file (typed tables, no v4 version row).
     let dv = Dir::new("fs-objects-src-real-v5");

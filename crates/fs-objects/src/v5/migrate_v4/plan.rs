@@ -168,10 +168,10 @@ impl MigrationPlan {
                 gone.push(p.display().to_string());
             }
         }
-        if let Some(r) = self.saved.report.take() {
-            if fs::remove_file(&r).is_ok() {
-                gone.push(r.display().to_string());
-            }
+        if let Some(r) = self.saved.report.take()
+            && fs::remove_file(&r).is_ok()
+        {
+            gone.push(r.display().to_string());
         }
         format!(
             "the check was aborted, the v4 file {} was not changed; removed what this run had made: [{}]; nothing was switched",
