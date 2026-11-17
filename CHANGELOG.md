@@ -2,6 +2,11 @@
 
 Version = tag.
 
+## Unreleased
+
+- Umwandler fixes for the gates (fmt, clippy pedantic with rustc 1.99 in `migrate_v4/{backup,carry,plan}.rs` and the migrate tests, `io()` moved out of `migrate_v4/mod.rs` into `ioerr.rs`); no change in behaviour.
+- Auf Deutsch: Umwandler-Korrekturen fuer die Gates (fmt, Clippy pedantic mit rustc 1.99 in `migrate_v4/` und den Migrationstests, `io()` aus `mod.rs` nach `ioerr.rs` verschoben); keine Verhaltensaenderung.
+
 ## 0.0.8
 
 Why: the migration scaffold of the untagged v0.0.7 could, by its first review (Opus, conditions 1 to 6), still hurt a person's data in rare cases (it opened the v4 file read-write, it could run while the program wrote to it, it left a half-built file after an error, it let the fall-back give up work silently, it dropped envelope times without saying so). This version closes those holes before any real converter is written; data safety comes first. v0.0.7 was never tagged: its content is listed here too.

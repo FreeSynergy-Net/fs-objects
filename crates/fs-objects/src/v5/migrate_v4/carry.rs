@@ -3,15 +3,17 @@
 //!
 //! Pattern: Specification (small independent rules: each says "carried" or gives the reason).
 
+use std::fmt::Write as _;
+
 use sha2::{Digest, Sha256};
 use turso::Value;
 
 use super::convert::Converter;
 use crate::StoredObject;
+use crate::v5::Conn;
 use crate::v5::codec::{get_text, id_value, int, text};
 use crate::v5::original::{original_of, sha256_hex};
 use crate::v5::tables_more::OBJECT_ORIGINAL;
-use crate::v5::Conn;
 
 /// What the scaffold cannot carry: the object is held with a reason instead of dropping the data.
 pub(super) fn not_carried(o: &StoredObject, conv: &dyn Converter) -> Option<String> {
@@ -106,5 +108,8 @@ pub(super) async fn verify_extras(
 }
 
 fn hex(b: &[u8]) -> String {
-    b.iter().map(|x| format!("{x:02x}")).collect()
+    b.iter().fold(String::new(), |mut a, x| {
+        let _ = write!(a, "{x:02x}");
+        a
+    })
 }
