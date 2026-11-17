@@ -8,10 +8,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use async_trait::async_trait;
 use common_migrate::{Dir, NOW, good, opts, snapshot, v4_file};
+use fs_objects::StoredObject;
 use fs_objects::v5::migrate_v4::notes::NotesConverter;
 use fs_objects::v5::migrate_v4::{Converted, Converter, Hold, MigrationPlan, Phase};
 use fs_objects::v5::{Conn, Domain, Error, Store};
-use fs_objects::StoredObject;
 
 async fn switched(dir: &Dir) -> (std::path::PathBuf, MigrationPlan) {
     let path = v4_file(dir, good()).await;
@@ -37,7 +37,10 @@ async fn the_fall_back_from_switched_is_refused_when_the_new_file_changed() {
             .unwrap();
     }
     let err = plan.fall_back(false).unwrap_err().to_string();
-    assert!(err.contains("would be lost") && err.contains("confirm_loss"), "{err}");
+    assert!(
+        err.contains("would be lost") && err.contains("confirm_loss"),
+        "{err}"
+    );
     assert_eq!(plan.phase(), Phase::Switched, "refused: nothing changed");
     assert_eq!(plan.active_path(), v5);
     // Only an explicit confirmation gives the changes up, and the state says so after a restart.
@@ -107,7 +110,10 @@ async fn an_aborted_check_removes_what_it_made_and_only_that() {
         .await
         .unwrap_err()
         .to_string();
-    assert!(err.contains("injected") && err.contains("removed what this run had made"), "{err}");
+    assert!(
+        err.contains("injected") && err.contains("removed what this run had made"),
+        "{err}"
+    );
     assert!(plan.abort_note().unwrap().contains("objects.db.v5"));
     assert_eq!(plan.phase(), Phase::Checking, "nothing was switched");
     assert_eq!(

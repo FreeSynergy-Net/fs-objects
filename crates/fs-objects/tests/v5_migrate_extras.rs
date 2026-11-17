@@ -9,8 +9,8 @@ mod common_migrate;
 use async_trait::async_trait;
 use chrono::DateTime;
 use common_migrate::{Dir, NOW, check_with_standard_sqlite, note, opts, v4_file};
-use fs_objects::v5::codec::{get_int, get_opt_int, id_value, int, opt_int};
 use fs_objects::v5::check::typed;
+use fs_objects::v5::codec::{get_int, get_opt_int, id_value, int, opt_int};
 use fs_objects::v5::id::from_v4;
 use fs_objects::v5::migrate_v4::notes::{NOTE, NotesConverter, TAG};
 use fs_objects::v5::migrate_v4::{Converted, Converter, Hold, MigrationPlan, TableRow};
@@ -132,8 +132,16 @@ async fn times_and_media_type_are_carried_by_the_converter_or_held_never_dropped
     ];
     let path = v4_file(&dir, objects).await;
     let mut plan = MigrationPlan::open(&path).unwrap();
-    let report = plan.check(&NotesConverter, opts(), NOW).await.unwrap().clone();
-    assert_eq!(report.converted_total(), 1, "only the object without times and with the right type");
+    let report = plan
+        .check(&NotesConverter, opts(), NOW)
+        .await
+        .unwrap()
+        .clone();
+    assert_eq!(
+        report.converted_total(),
+        1,
+        "only the object without times and with the right type"
+    );
     assert_eq!(report.held.len(), 3);
     let why = |name: &str| {
         report
@@ -174,7 +182,11 @@ async fn a_converter_that_carries_the_times_is_compared_by_the_round_trip() {
     let mut plan = MigrationPlan::open(&p2).unwrap();
     let r = plan.check(&Liar, opts(), NOW).await.unwrap().clone();
     assert_eq!((r.converted_total(), r.held.len()), (0, 1));
-    assert!(r.held[0].reason.contains("roundtrip.extras"), "{:?}", r.held);
+    assert!(
+        r.held[0].reason.contains("roundtrip.extras"),
+        "{:?}",
+        r.held
+    );
     let _ = int(0);
 }
 
@@ -188,13 +200,20 @@ async fn the_original_is_carried_byte_for_byte_and_compared() {
     });
     let path = v4_file(&dir, vec![o, note("without", json!({"title":"without"}))]).await;
     let mut plan = MigrationPlan::open(&path).unwrap();
-    let r = plan.check(&NotesConverter, opts(), NOW).await.unwrap().clone();
+    let r = plan
+        .check(&NotesConverter, opts(), NOW)
+        .await
+        .unwrap()
+        .clone();
     assert_eq!((r.converted_total(), r.held.len()), (2, 0), "{:?}", r.held);
     let v5 = Store::open(&r.target, NOW).await.unwrap();
     let rows = v5
         .read()
         .await
-        .query("SELECT media_type, bytes, sha256 FROM object_original", Vec::new())
+        .query(
+            "SELECT media_type, bytes, sha256 FROM object_original",
+            Vec::new(),
+        )
         .await
         .unwrap();
     assert_eq!(rows.len(), 1);
@@ -210,12 +229,19 @@ async fn the_original_is_carried_byte_for_byte_and_compared() {
 async fn free_text_that_looks_like_json_is_no_finding_and_the_file_passes_standard_sqlite() {
     let dir = Dir::new("fs-objects-extras-freetext");
     let objects = vec![
-        note("[1,2]", json!({"title":"{}","body":"[1,2]","tags":["{\"a\":1}","[3]"]})),
+        note(
+            "[1,2]",
+            json!({"title":"{}","body":"[1,2]","tags":["{\"a\":1}","[3]"]}),
+        ),
         note("{}", json!({"title":"[true]","body":"{\"x\": [1]}"})),
     ];
     let path = v4_file(&dir, objects).await;
     let mut plan = MigrationPlan::open(&path).unwrap();
-    let r = plan.check(&NotesConverter, opts(), NOW).await.unwrap().clone();
+    let r = plan
+        .check(&NotesConverter, opts(), NOW)
+        .await
+        .unwrap()
+        .clone();
     assert_eq!((r.converted_total(), r.held.len()), (2, 0), "{:?}", r.held);
     let v5 = Store::open(&r.target, NOW).await.unwrap();
     let found = typed(&v5).await.unwrap();

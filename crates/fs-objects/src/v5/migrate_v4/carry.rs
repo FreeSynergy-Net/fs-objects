@@ -8,10 +8,10 @@ use turso::Value;
 
 use super::convert::Converter;
 use crate::StoredObject;
+use crate::v5::Conn;
 use crate::v5::codec::{get_text, id_value, int, text};
 use crate::v5::original::{original_of, sha256_hex};
 use crate::v5::tables_more::OBJECT_ORIGINAL;
-use crate::v5::Conn;
 
 /// What the scaffold cannot carry: the object is held with a reason instead of dropping the data.
 pub(super) fn not_carried(o: &StoredObject, conv: &dyn Converter) -> Option<String> {

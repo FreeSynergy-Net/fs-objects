@@ -13,8 +13,8 @@ use super::activities::last_activity_id;
 use super::encryption;
 use super::identity::read_identity;
 use super::migration::{detect_version, migrate};
-use super::schema::SCHEMA_VERSION;
 use super::options::OpenOptions;
+use super::schema::SCHEMA_VERSION;
 use super::store::Inner;
 use crate::{Error, Result};
 

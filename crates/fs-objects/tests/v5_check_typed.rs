@@ -138,7 +138,11 @@ async fn an_object_value_that_is_a_blob_is_found() {
 #[tokio::test]
 async fn a_column_of_the_type_any_is_a_finding() {
     let s = store(&[]).await;
-    run(&s, "CREATE TABLE demo_loose (id TEXT NOT NULL, v ANY, PRIMARY KEY (id)) STRICT").await;
+    run(
+        &s,
+        "CREATE TABLE demo_loose (id TEXT NOT NULL, v ANY, PRIMARY KEY (id)) STRICT",
+    )
+    .await;
     assert!(
         rules(&s)
             .await
