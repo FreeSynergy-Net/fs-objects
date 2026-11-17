@@ -37,7 +37,7 @@ async fn ka3_values_round_trip_and_rev_rises_per_write() {
         ]
     );
     assert!(r.values(0, T, P).await.unwrap().is_empty(), "other scope");
-    assert!(r.values(0, G, PlaceRow::Device).await.unwrap().is_empty());
+    assert_eq!(r.values(0, G, PlaceRow::Device).await.unwrap().len(), 0);
     assert!(r.values(1, G, P).await.unwrap().is_empty(), "other profile");
     r.put(0, G, P, "a.flag", Some(&Prim::Bool(false)), w, at(6))
         .await
@@ -183,7 +183,7 @@ async fn ka11_put_on_a_locked_key_is_refused() {
         assert!(invalid_is(&res, "settings_value.key", "locked"), "{res:?}");
     }
     assert_eq!(r.rev().await.unwrap(), rev);
-    assert!(r.values(0, G, P).await.unwrap().is_empty());
+    assert_eq!(r.values(0, G, P).await.unwrap().len(), 0);
 }
 
 /// KA14: a future cancelled inside the write is rolled back at the next access: the rev is the same, no value.
@@ -203,7 +203,7 @@ async fn ka14_a_cancelled_put_rolls_back() {
         );
     }
     assert_eq!(r.rev().await.unwrap(), 0, "rolled back");
-    assert!(r.values(0, G, P).await.unwrap().is_empty());
+    assert_eq!(r.values(0, G, P).await.unwrap().len(), 0);
     r.put(0, G, P, "k", Some(&v), Writer::default(), at(3))
         .await
         .unwrap();

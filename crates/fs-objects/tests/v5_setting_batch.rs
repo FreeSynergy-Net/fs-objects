@@ -53,10 +53,10 @@ async fn ka18_a_failing_batch_changes_nothing() {
         "{res:?}"
     );
     assert_eq!(r.rev().await.unwrap(), 0);
-    assert!(r.values(0, G, PlaceRow::Profile).await.unwrap().is_empty());
+    assert_eq!(r.values(0, G, PlaceRow::Profile).await.unwrap().len(), 0);
     assert_eq!(r.index().await.unwrap().profiles.len(), 1);
-    assert!(r.instance().await.unwrap().values.is_empty());
-    assert!(r.log(None, 10).await.unwrap().is_empty());
+    assert_eq!(r.instance().await.unwrap().values.len(), 0);
+    assert_eq!(r.log(None, 10).await.unwrap().len(), 0);
     // A later batch works (the connection is clean).
     assert_eq!(
         r.apply(&ops[..1], None, at(6)).await.unwrap(),
@@ -143,7 +143,7 @@ async fn ka20_instance_operation_needs_an_actor() {
 async fn ka21_programs_lists_programs_with_values() {
     let s = mem().await;
     let r = SettingRows::new(&s).await.unwrap();
-    assert!(r.programs().await.unwrap().is_empty());
+    assert_eq!(r.programs().await.unwrap().len(), 0);
     let v = Prim::Bool(true);
     let w = Writer::default();
     for p in ["tasks", "people", "tasks"] {
