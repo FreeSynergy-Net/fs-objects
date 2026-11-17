@@ -13,12 +13,20 @@
 
 mod backup;
 mod build;
+mod carry;
 mod convert;
+mod lock;
 pub mod notes;
 mod plan;
 mod report;
+mod state;
 
-pub use backup::{backup_file, unique_sibling};
+pub use backup::{backup_file, fingerprint, unique_sibling};
 pub use convert::{Converted, Converter, Hold, TableRow};
+pub use lock::SourceLock;
 pub use plan::{MigrationPlan, Phase};
 pub use report::{Held, Report};
+
+fn io(what: &str, e: &std::io::Error) -> crate::v5::error::Error {
+    crate::v5::error::Error::Unavailable(format!("{what}: {e}"))
+}

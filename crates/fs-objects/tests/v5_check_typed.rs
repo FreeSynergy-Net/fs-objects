@@ -134,3 +134,22 @@ async fn an_object_value_that_is_a_blob_is_found() {
     )));
     let _ = id_value(id);
 }
+
+#[tokio::test]
+async fn a_column_of_the_type_any_is_a_finding() {
+    let s = store(&[]).await;
+    run(&s, "CREATE TABLE demo_loose (id TEXT NOT NULL, v ANY, PRIMARY KEY (id)) STRICT").await;
+    assert!(
+        rules(&s)
+            .await
+            .contains(&(Rule::AnyType, "demo_loose".into(), Some("v".into())))
+    );
+}
+
+#[tokio::test]
+async fn core_free_text_that_looks_like_json_is_no_finding() {
+    let s = store(&[]).await;
+    run(&s, "INSERT INTO objects (id, type, name, name_sort, published, updated, rev) VALUES ('00000000-0000-7000-8000-000000000001','n','[1,2]','x',0,0,1)").await;
+    run(&s, "INSERT INTO objects (id, type, name, name_sort, published, updated, rev) VALUES ('00000000-0000-7000-8000-000000000002','n','{}','x',0,0,1)").await;
+    assert!(!rules(&s).await.iter().any(|f| f.0 == Rule::JsonInText));
+}

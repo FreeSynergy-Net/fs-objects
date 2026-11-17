@@ -52,6 +52,33 @@ pub trait Converter: Send + Sync {
     /// The engine's error or a damaged row.
     async fn export(&self, conn: &Conn<'_>, id: fs_types::ObjectId) -> Result<serde_json::Value>;
 
+    /// Whether this converter carries the envelope's `start_time` and `end_time` in its typed rows (and gives them
+    /// back through [`Converter::export_times`]). When it does not, an object that has one of them is HELD BACK:
+    /// the times are never dropped silently. The default carries nothing.
+    fn carries_times(&self) -> bool {
+        false
+    }
+
+    /// The `start_time` and `end_time` (UTC milliseconds) as they are in the rows of the new file; only called when
+    /// [`Converter::carries_times`] is true. The round trip compares them with the v4 envelope.
+    ///
+    /// # Errors
+    /// The engine's error or a damaged row.
+    async fn export_times(
+        &self,
+        _conn: &Conn<'_>,
+        _id: fs_types::ObjectId,
+    ) -> Result<(Option<i64>, Option<i64>)> {
+        Ok((None, None))
+    }
+
+    /// The media type (`content_type`) this converter's content has for an object type, which the way back
+    /// reproduces. A v4 object with another `content_type` is HELD BACK (never rewritten silently). Default
+    /// `application/json`.
+    fn content_type(&self, _object_type: &str) -> String {
+        "application/json".to_owned()
+    }
+
     /// The documented normalization applied to the v4 content before it is compared with the export (for example
     /// an instant written with an offset is rewritten as UTC). The default changes nothing.
     fn normalize(&self, content: &serde_json::Value) -> serde_json::Value {

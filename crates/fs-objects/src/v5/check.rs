@@ -2,7 +2,9 @@
 //! engine (`sqlite_master`, `PRAGMA table_info`) and the data, not what a program declared. It returns findings (it
 //! does not stop at the first), so a report can list them all.
 //!
-//! Rules: (1) every table is `STRICT`; (2) no text column holds JSON (heuristic: starts with `{` or `[` and parses);
+//! Rules: (1) every table is `STRICT`; (2) no text column holds JSON (heuristic: starts with `{` or `[` and parses; a column of the logical type
+//! `free_text`, which a person writes into, is exempt: `[1,2]` there is a note, not JSON), and no column has the type
+//! `ANY`;
 //! (3) no `value_kind object` blob: a logged `object` value must be an object id; (4) time columns are `INTEGER`
 //! and hold integers; (5) a `REF` column that is not the table's own `id` has a foreign key, except the person
 //! snapshot (`*_abzug`) and the core columns in [`REF_WITHOUT_FK`], where the program's provider checks; a person
@@ -40,6 +42,16 @@ pub const REF_WITHOUT_FK: &[(&str, &str)] = &[
     ("unlogged_ids", "object_id"),
 ];
 
+/// Core columns that hold text a person wrote (the object name and its sort key, the logged old and new text of any field): they
+/// are exempt from the JSON heuristic like a column of the logical type `free_text`. They keep the label `text` in
+/// `fs_column`, because a recorded label is part of what a file was built with (changing it would refuse old files).
+pub const FREE_TEXT_CORE: &[(&str, &str)] = &[
+    ("objects", "name"),
+    ("objects", "name_sort"),
+    ("activity_change", "old_text"),
+    ("activity_change", "new_text"),
+];
+
 /// Which rule a finding is about.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Rule {
@@ -47,6 +59,8 @@ pub enum Rule {
     NotStrict,
     /// A text column holds JSON.
     JsonInText,
+    /// A column has the type `ANY` (a `STRICT` table accepts it, but then it is not typed).
+    AnyType,
     /// A logged `object` value is not an object id.
     ObjectBlob,
     /// A time column is not `INTEGER` or holds something else.
@@ -191,7 +205,14 @@ pub async fn typed(store: &Store) -> Result<Vec<Finding>> {
             if col.ty == "BLOB" && !blob_ok(&name, &col.name) {
                 found(&mut out, Rule::BlobNotAllowed, &name, Some(&col.name));
             }
-            if col.ty == "TEXT" && json_cells(&c, &name, &col.name).await? {
+            if col.ty == "ANY" {
+                found(&mut out, Rule::AnyType, &name, Some(&col.name));
+            }
+            if col.ty == "TEXT"
+                && logical != Some("free_text")
+                && !FREE_TEXT_CORE.contains(&(name.as_str(), col.name.as_str()))
+                && json_cells(&c, &name, &col.name).await?
+            {
                 found(&mut out, Rule::JsonInText, &name, Some(&col.name));
             }
             if matches!(logical, Some("utc" | "local" | "date")) {
