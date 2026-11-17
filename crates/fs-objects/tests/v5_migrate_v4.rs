@@ -217,7 +217,7 @@ async fn the_switch_waits_for_the_human() {
     assert_eq!(again.phase(), Phase::Switched);
     assert_eq!(again.active_path(), new);
     let mut again = again;
-    again.fall_back().unwrap();
+    again.fall_back(false).unwrap();
     assert_eq!(
         again.active_path(),
         path,

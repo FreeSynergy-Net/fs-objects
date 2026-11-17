@@ -49,7 +49,7 @@ pub(super) async fn migrate(c: &Connection) -> Result<()> {
 }
 
 /// 0 = empty database, 1 = 0.1 (tables but no version table), else the stored version.
-async fn detect_version(c: &Connection) -> Result<i64> {
+pub(super) async fn detect_version(c: &Connection) -> Result<i64> {
     let tables: Vec<String> = collect(
         c,
         "SELECT name FROM sqlite_master WHERE type = 'table'",
