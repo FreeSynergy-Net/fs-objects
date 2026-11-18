@@ -138,11 +138,12 @@ async fn the_fall_back_from_switched_is_refused_when_the_switch_fingerprint_is_u
         text.contains("v5fingerprint="),
         "the switch kept it: {text}"
     );
-    let kept: String = text
+    let mut kept: Vec<&str> = text
         .lines()
         .filter(|l| !l.starts_with("v5fingerprint="))
-        .map(|l| format!("{l}\n"))
         .collect();
+    kept.push("");
+    let kept = kept.join("\n");
     std::fs::write(&state, kept).unwrap();
     let mut again = MigrationPlan::open(&path).unwrap();
     assert_eq!(again.phase(), Phase::Switched);
