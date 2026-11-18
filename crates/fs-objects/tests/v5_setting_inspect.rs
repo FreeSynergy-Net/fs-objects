@@ -140,3 +140,28 @@ async fn ka13_inspect_looks_without_touching() {
         "a bare store: our domain is not registered yet"
     );
 }
+
+/// KA13 (read-only): a store file with no write permission, in a folder without write permission, is still looked at: the
+/// engine is opened read-only (an open that wants to write would fail on it), and nothing changes.
+#[cfg(unix)]
+#[tokio::test]
+async fn ka13_inspect_works_on_a_read_only_file_in_a_read_only_folder() {
+    use std::os::unix::fs::PermissionsExt;
+    let d = dir();
+    let p = file(&d);
+    {
+        let s = SettingRows::open(p.to_str().unwrap(), at(1)).await.unwrap();
+        SettingRows::new(&s).await.unwrap().rev().await.unwrap();
+    }
+    let set = |m: u32| {
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(m)).unwrap();
+        std::fs::set_permissions(d.path(), std::fs::Permissions::from_mode(m | 0o100)).unwrap();
+    };
+    set(0o444);
+    let got = looks(&p, &DOMAIN).await;
+    let newer = looks(&p, &Domain::new("settings", "x", &ALL, &STEPS[..3])).await;
+    set(0o644);
+    std::fs::set_permissions(d.path(), std::fs::Permissions::from_mode(0o755)).unwrap();
+    assert_eq!(got, Fits { found: 5 });
+    assert_eq!(newer, Newer { found: 5, known: 3 });
+}
