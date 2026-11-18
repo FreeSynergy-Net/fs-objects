@@ -45,8 +45,13 @@ const MAGIC: &[u8; 16] = b"SQLite format 3\0";
 impl Store {
     /// Looks at `path` for `domain` and changes nothing: the file stays byte-identical, no file is left behind.
     ///
+    /// Use it only BEFORE this process opens the store (or after the last handle on the file is closed): the engine takes
+    /// and releases POSIX `fcntl` locks on the file, and such a lock belongs to the process, so closing ANY descriptor of
+    /// the file in this process drops the locks of the others (the same class of error as the migrator's A2, Opus
+    /// 2026-11-18). A file this process already holds open may lose its protection through the look.
+    ///
     /// A file that is empty, shorter than a header, or foreign (another domain, no registry) is `Broken`: it is not a store
-    /// this program may open. A damaged copy that makes the engine fail or panic is `Broken { cause: "open" }`.
+    /// this program may open. A damaged file that makes the engine fail or panic is `Broken { cause: "open" }`.
     ///
     /// # Errors
     /// Never for a broken file (that is `Broken`); the `Result` is kept for later causes (the signature is stable).
