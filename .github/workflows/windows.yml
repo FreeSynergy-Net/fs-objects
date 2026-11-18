@@ -1,0 +1,23 @@
+# Copy to <repo>/.github/workflows/windows.yml - fmt, clippy (pedantic) and tests on windows-2022 on every push, on every branch.
+# Pin to a fs-release TAG that contains _windows-check.yml (v0.0.11 = first tag after the Opus look; never @main); `scripts/pin-refs.sh --dir <repo> <tag>` raises it. No secrets, so no `secrets: inherit`.
+name: windows
+on:
+  push:
+  workflow_dispatch:
+    inputs:
+      cache: { type: boolean, default: true, description: "Rust cache on; false = cold run (the evidence for a tag)" }
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    uses: FreeSynergy/fs-release/.github/workflows/_windows-check.yml@v0.0.11
+    with:
+      cache: ${{ github.event_name != 'workflow_dispatch' || inputs.cache }} # push: cache on; by hand: the input above
+    #   (more, optional)
+    #   runner: windows-2022          # explicit, never *-latest
+    #   packages: "fs-types fs-foo"   # -p each; default: --workspace
+    #   features: "--all-features"    # default
+    #   clippy-extra: "-W clippy::pedantic"
+    #   no-fail-fast: true
