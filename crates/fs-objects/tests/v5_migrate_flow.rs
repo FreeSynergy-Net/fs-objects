@@ -125,3 +125,31 @@ async fn an_aborted_check_removes_what_it_made_and_only_that() {
     let mut again = MigrationPlan::open(&path).unwrap();
     again.check(&NotesConverter, opts(), NOW).await.unwrap();
 }
+
+/// An unknown fingerprint of the new file counts as changed (the state file lost its `v5fingerprint=` line): the fall-back
+/// is refused like for a changed file, never let through (a person confirms the loss explicitly).
+#[tokio::test]
+async fn the_fall_back_from_switched_is_refused_when_the_switch_fingerprint_is_unknown() {
+    let dir = Dir::new("fs-objects-flow-unknown");
+    let (path, _plan) = switched(&dir).await;
+    let state = dir.file("objects.db.migration-state");
+    let text = std::fs::read_to_string(&state).unwrap();
+    assert!(
+        text.contains("v5fingerprint="),
+        "the switch kept it: {text}"
+    );
+    let kept: String = text
+        .lines()
+        .filter(|l| !l.starts_with("v5fingerprint="))
+        .map(|l| format!("{l}\n"))
+        .collect();
+    std::fs::write(&state, kept).unwrap();
+    let mut again = MigrationPlan::open(&path).unwrap();
+    assert_eq!(again.phase(), Phase::Switched);
+    let err = again.fall_back(false).unwrap_err().to_string();
+    assert!(
+        err.contains("would be lost") && err.contains("confirm_loss"),
+        "{err}"
+    );
+    assert_eq!(again.phase(), Phase::Switched, "refused: nothing changed");
+}
