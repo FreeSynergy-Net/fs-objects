@@ -1,6 +1,6 @@
 //! Migration v4 to v5 (scaffold): backup, a new file, the round trip per object, held objects, the report and the
 //! switch that waits for a person.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 use async_trait::async_trait;
 use fs_objects::v5::migrate_v4::notes::{NOTE_TYPE, NotesConverter};

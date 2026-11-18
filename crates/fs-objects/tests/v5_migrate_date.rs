@@ -1,6 +1,6 @@
 //! "A date stays a date" (normalization rule): an all-day value of the example domain is a DATE (days), never an
 //! instant in UTC and never shifted by a zone; an instant (`due`) is the one that is rewritten as UTC.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 mod common_migrate;
 

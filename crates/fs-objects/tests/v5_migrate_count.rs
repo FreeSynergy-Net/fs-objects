@@ -1,6 +1,6 @@
 //! Review umwandler-2, condition 6: the count is explicit (v4 = converted + held back), and objects that the v4 store
 //! refuses to return (written unlogged) stop the run WITH ALL of them listed at once; nothing is left behind.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 mod common_migrate;
 

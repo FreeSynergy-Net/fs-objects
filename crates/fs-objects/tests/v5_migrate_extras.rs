@@ -2,7 +2,7 @@
 //! times and the media type are carried by the converter or the object is HELD BACK with the reason, never dropped;
 //! the original is carried and compared; free text that looks like JSON is no finding; the migrated file passes the
 //! standard-SQLite check.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 mod common_migrate;
 

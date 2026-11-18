@@ -1,7 +1,7 @@
 //! Review umwandler-2, condition 2: a REAL program (an open `TursoStore`, which holds the engine's own POSIX lock)
 //! stops the check. The program runs in a child process (the POSIX lock belongs to a process): this test binary
 //! starts itself with `FS_LOCK_CHILD` set, the child opens the store and waits on stdin.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 mod common_migrate;
 

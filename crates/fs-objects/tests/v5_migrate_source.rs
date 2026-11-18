@@ -1,7 +1,7 @@
 //! The source file is only READ and only a v4 file is migrated (review objects-v007, conditions 1 and 5): the check
 //! looks at the schema version before it writes anything, refuses a file that is not exactly v4, and refuses while
 //! another handle still holds the file. The file does not change by a single byte, whatever the outcome.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 mod common_migrate;
 

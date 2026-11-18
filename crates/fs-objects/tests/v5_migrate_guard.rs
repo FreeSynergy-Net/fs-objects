@@ -1,7 +1,7 @@
 //! Review umwandler-2, conditions 1, 3 and 4: the v4 file is compared again at `confirm` and `switch`; the state file
 //! is written atomically and a damaged one is an error; a v4 file that changes during the run, a converter that
 //! brings in an original the v4 object did not have, and a damaged backup are found.
-#![cfg(feature = "v5")]
+#![cfg(all(feature = "v5", unix))] // the migrator is unix only for now (Windows: a locked file cannot be read through another handle)
 
 mod common_migrate;
 
