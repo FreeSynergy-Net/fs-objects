@@ -1,6 +1,7 @@
 //! Teil A, `Store::inspect`: a file whose registry and steps are valid but whose `PRAGMA integrity_check` fails is
 //! `Broken { cause: "integrity" }` (K2-Y5: the result of the check must count; every other test passes without it).
 #![cfg(feature = "v5")]
+#![allow(clippy::many_single_char_names)]
 
 mod common_setting;
 
