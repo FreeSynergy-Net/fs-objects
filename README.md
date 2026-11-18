@@ -21,7 +21,7 @@ Latest tag: `v0.0.6` (the next release is 0.0.8).
 
 ## What is not there yet
 
-> WARNING / WARNUNG: do not use the migrator (`v5::migrate_v4`) until 0.0.8 is tagged (known lock gap, see A1/A2 of the review). Umwandler nicht benutzen, bis 0.0.8 getaggt ist. (Removed in the release commit.)
+> NOTE / HINWEIS: the migrator (`v5::migrate_v4`) stays unused: no data migration or rescue until the first real users exist (user rule W3), and no program has a real converter. Der Umwandler bleibt ungenutzt: keine Datenmigration, bis es erste echte Nutzer gibt.
 
 - Migration v4 to v5 is a scaffold (`v5::migrate_v4`: backup, new file, per-program converter, round trip, report, switch after a person confirms); the source is only read (read-only open, schema version must be 4, advisory locks of the kind the engine takes: the program must be closed from `check` until `switch`; the locks hold also while the files are read; checked with a real program in another process that starts before and during the check, Windows not checked yet), an aborted run removes what it made, the fall-back from the new file refuses to lose changes; the original is carried; no program has a real converter yet, and the v4 activity history, addressing and protection are not carried over yet (held back or reported). `v5::check::typed` checks a v5 file against ADR 0086.
 - No key vault, so keys come from the caller.
@@ -37,7 +37,7 @@ Objects is what lets programs share the same kinds of things. It used to be call
 ## For developers
 
 - Workspace crate: `fs-objects`. `Store` is a facade over seven small traits (`ObjectRepository`, `ObjectQuery`, `ActivityLog`, `ChangeFeed`, `UndoRedo`, `HistoryRetention`, `StoreInfo`); depend only on the one you need. First backend: `TursoStore`.
-- The shared types of the envelope live in [fs-types](https://github.com/FreeSynergy/fs-types) (v0.0.1, feature `v5`).
+- The shared types of the envelope live in [fs-types](https://github.com/FreeSynergy/fs-types) (v0.0.4, feature `v5`).
 - Build and test: `cargo build --workspace` and `cargo test --workspace`.
 - Design, schema and decisions: [DESIGN.md](DESIGN.md).
 - Licence: MIT OR Apache-2.0.
