@@ -165,3 +165,25 @@ async fn ka13_inspect_works_on_a_read_only_file_in_a_read_only_folder() {
     assert_eq!(got, Fits { found: 5 });
     assert_eq!(newer, Newer { found: 5, known: 3 });
 }
+
+/// KA13 (foreign file): a valid SQLite file that is not a store (no registry) is `Broken` and stays byte-identical: looking at
+/// it must not run the store bootstrap (`Store::open` would add the `fs_*` tables to it).
+#[tokio::test]
+async fn ka13_a_foreign_sqlite_file_is_not_bootstrapped() {
+    let d = dir();
+    let p = d.path().join("foreign.db");
+    {
+        let db = turso::Builder::new_local(p.to_str().unwrap())
+            .build()
+            .await
+            .unwrap();
+        let c = db.connect().unwrap();
+        c.execute("CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)", ())
+            .await
+            .unwrap();
+        c.execute("INSERT INTO notes (body) VALUES ('mine')", ())
+            .await
+            .unwrap();
+    }
+    assert_eq!(looks(&p, &DOMAIN).await, Broken { cause: "registry" });
+}
