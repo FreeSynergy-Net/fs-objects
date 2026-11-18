@@ -25,6 +25,8 @@ pub struct Report {
     pub backup: String,
     /// The new v5 file.
     pub target: String,
+    /// The number of objects in the v4 file: it equals converted + held back (the run stops otherwise).
+    pub v4_total: usize,
     /// Objects converted and round-tripped, per object type.
     pub converted: BTreeMap<String, usize>,
     /// Objects held back, with the reason.
@@ -52,6 +54,13 @@ impl Report {
         let _ = writeln!(s, "backup of the v4 file:          {}", self.backup);
         let _ = writeln!(s, "new v5 file:                    {}", self.target);
         let _ = writeln!(s, "duration:                       {} ms\n", self.millis);
+        let _ = writeln!(
+            s,
+            "v4 objects: {} = converted {} + held back {}",
+            self.v4_total,
+            self.converted_total(),
+            self.held.len()
+        );
         let _ = writeln!(s, "converted: {}", self.converted_total());
         for (k, n) in &self.converted {
             let _ = writeln!(s, "  {k}: {n}");

@@ -1,10 +1,10 @@
 //! The backup of the v4 file: never overwrites, numbers a name that is taken, checks the copy.
 //!
-//! Pattern: Transaction script (copy, then compare the SHA-256 of both files).
+//! Pattern: Transaction script (copy, then compare the SHA-256 of both files). Files are read in blocks, never whole.
 
 use std::fmt::Write as _;
 use std::fs;
-use std::io::Write;
+use std::io::Read;
 use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
@@ -28,32 +28,57 @@ pub fn unique_sibling(path: &Path, suffix: &str) -> PathBuf {
     cand
 }
 
+/// The size of one block read from a file: the memory a checksum needs, however large the file is.
+pub(super) const BLOCK: usize = 64 * 1024;
+
+/// Feed a reader into a hash in blocks of at most [`BLOCK`] bytes.
+pub(super) fn feed(r: &mut impl Read, h: &mut Sha256) -> std::io::Result<()> {
+    let mut buf = vec![0_u8; BLOCK];
+    loop {
+        match r.read(&mut buf) {
+            Ok(0) => return Ok(()),
+            Ok(n) => h.update(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
+}
+
+fn feed_file(path: &Path, h: &mut Sha256, what: &str) -> Result<()> {
+    let mut f = fs::File::open(path).map_err(|e| io(what, &e))?;
+    feed(&mut f, h).map_err(|e| io(what, &e))
+}
+
 fn sha(path: &Path) -> Result<Vec<u8>> {
-    let bytes = fs::read(path).map_err(|e| io("read for the checksum", &e))?;
-    Ok(Sha256::digest(&bytes).to_vec())
+    let mut h = Sha256::new();
+    feed_file(path, &mut h, "read for the checksum")?;
+    Ok(h.finalize().to_vec())
+}
+
+/// The copy must have the same SHA-256 as the original.
+pub(super) fn verify_copy(from: &Path, to: &Path) -> Result<()> {
+    if sha(from)? == sha(to)? {
+        Ok(())
+    } else {
+        Err(Error::Unavailable(
+            "the backup differs from the v4 file".into(),
+        ))
+    }
 }
 
 /// Copy to a NEW file. A copy that fails after it was created is removed again (it is this run's own file).
 fn copy_new(from: &Path, to: &Path) -> Result<()> {
-    let bytes = fs::read(from).map_err(|e| io("read the v4 file", &e))?;
+    let mut src = fs::File::open(from).map_err(|e| io("read the v4 file", &e))?;
     let mut f = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
         .open(to)
         .map_err(|e| io("create the backup (never overwrites)", &e))?;
-    let done = f
-        .write_all(&bytes)
+    let done = std::io::copy(&mut src, &mut f)
+        .map(|_| ())
         .and_then(|()| f.sync_all())
         .map_err(|e| io("write the backup", &e))
-        .and_then(|()| {
-            if sha(from)? == sha(to)? {
-                Ok(())
-            } else {
-                Err(Error::Unavailable(
-                    "the backup differs from the v4 file".into(),
-                ))
-            }
-        });
+        .and_then(|()| verify_copy(from, to));
     if done.is_err() {
         let _ = fs::remove_file(to);
     }
@@ -67,11 +92,11 @@ fn copy_new(from: &Path, to: &Path) -> Result<()> {
 /// `Unavailable` when a file cannot be read.
 pub fn fingerprint(path: &Path) -> Result<String> {
     let mut h = Sha256::new();
-    h.update(fs::read(path).map_err(|e| io("read for the fingerprint", &e))?);
+    feed_file(path, &mut h, "read for the fingerprint")?;
     let wal = PathBuf::from(format!("{}-wal", path.display()));
     if wal.is_file() {
         h.update(b"\0wal\0");
-        h.update(fs::read(&wal).map_err(|e| io("read the -wal file for the fingerprint", &e))?);
+        feed_file(&wal, &mut h, "read the -wal file for the fingerprint")?;
     }
     Ok(h.finalize().iter().fold(String::new(), |mut a, b| {
         let _ = write!(a, "{b:02x}");
@@ -95,3 +120,7 @@ pub fn backup_file(v4: &Path) -> Result<PathBuf> {
     }
     Ok(to)
 }
+
+#[cfg(test)]
+#[path = "backup_tests.rs"]
+mod tests;

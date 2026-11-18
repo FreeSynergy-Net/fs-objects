@@ -23,10 +23,10 @@ pub use super::state::Phase;
 /// One migration of one v4 file.
 #[derive(Debug)]
 pub struct MigrationPlan {
-    v4: PathBuf,
-    v5: PathBuf,
+    pub(super) v4: PathBuf,
+    pub(super) v5: PathBuf,
     state: PathBuf,
-    saved: Saved,
+    pub(super) saved: Saved,
     report: Option<Report>,
     abort_note: Option<String>,
 }
@@ -63,7 +63,7 @@ impl MigrationPlan {
         })
     }
 
-    fn go(&mut self, phase: Phase) -> Result<()> {
+    pub(super) fn go(&mut self, phase: Phase) -> Result<()> {
         let mut next = self.saved.clone();
         next.phase = phase;
         next.write(&self.state)?;
@@ -112,6 +112,7 @@ impl MigrationPlan {
         match self.run(conv, &v4, &backup, &before, now_ms).await {
             Ok(report) => {
                 self.saved.backup = Some(backup);
+                self.saved.v4_fingerprint = Some(before);
                 self.go(Phase::Ready)?;
                 Ok(self.report.insert(report))
             }
@@ -183,11 +184,12 @@ impl MigrationPlan {
     /// A person confirms after reading the report: `Ready` to `Confirmed`.
     ///
     /// # Errors
-    /// `Unavailable` when the state is not `Ready`.
+    /// `Unavailable` when the state is not `Ready`, or the v4 file changed since the check.
     pub fn confirm(&mut self) -> Result<()> {
         if self.saved.phase != Phase::Ready {
             return Err(wrong(self.saved.phase, "confirm"));
         }
+        self.v4_unchanged("confirm")?;
         self.go(Phase::Confirmed)
     }
 
@@ -195,23 +197,15 @@ impl MigrationPlan {
     /// is kept, so that a later fall-back can tell whether the new file was changed since.
     ///
     /// # Errors
-    /// `Unavailable` when no person has confirmed.
+    /// `Unavailable` when no person has confirmed, or the v4 file changed since the check.
     pub fn switch(&mut self) -> Result<&Path> {
         if self.saved.phase != Phase::Confirmed {
             return Err(wrong(self.saved.phase, "switch"));
         }
+        self.v4_unchanged("switch")?;
         self.saved.v5_fingerprint = Some(fingerprint(&self.v5)?);
         self.go(Phase::Switched)?;
         Ok(&self.v5)
-    }
-
-    /// Whether the new file differs from the moment of the switch (or the moment is unknown): then going back to
-    /// v4 would give up what was written since.
-    fn v5_changed(&self) -> Result<bool> {
-        if !self.v5.is_file() {
-            return Ok(false);
-        }
-        Ok(self.saved.v5_fingerprint.as_deref() != Some(fingerprint(&self.v5)?.as_str()))
     }
 
     /// Stay with (or return to) the v4 file for good. The v4 file was never changed, so before the switch nothing

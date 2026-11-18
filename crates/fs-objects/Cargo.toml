@@ -28,6 +28,10 @@ thiserror = "2"
 unicode-normalization = "0.1"
 sha2 = "0.11.0"
 
+# The POSIX lock (fcntl) of the v4 file: the kind the engine takes (already in the lock through the engine).
+[target.'cfg(unix)'.dependencies]
+rustix = { version = "1.0", features = ["fs"] }
+
 [dev-dependencies]
 tokio = { version = "1", features = ["full"] }
 tempfile = "3"
