@@ -17,6 +17,7 @@ mod carry;
 mod convert;
 mod guard;
 mod ioerr;
+mod keep;
 mod lock;
 pub mod notes;
 mod plan;

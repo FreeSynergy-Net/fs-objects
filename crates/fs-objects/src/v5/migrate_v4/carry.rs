@@ -113,3 +113,7 @@ fn hex(b: &[u8]) -> String {
         a
     })
 }
+
+#[cfg(test)]
+#[path = "carry_tests.rs"]
+mod tests;
