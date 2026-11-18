@@ -11,7 +11,7 @@
 use std::fs::File;
 use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex};
 
 static KEPT: Mutex<Vec<(PathBuf, Arc<File>)>> = Mutex::new(Vec::new());
 
@@ -31,7 +31,9 @@ fn same(file: &File, path: &Path) -> bool {
 pub(super) fn kept(path: &Path) -> std::io::Result<Arc<File>> {
     #[cfg(unix)]
     {
-        let mut all = KEPT.lock().unwrap_or_else(PoisonError::into_inner);
+        let mut all = KEPT
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         if let Some((_, f)) = all.iter().rev().find(|(p, f)| p == path && same(f, path)) {
             return Ok(Arc::clone(f));
         }

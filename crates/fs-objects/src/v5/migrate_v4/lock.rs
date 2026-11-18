@@ -49,6 +49,7 @@ fn posix(file: &File, path: &Path) -> Result<()> {
 }
 
 #[cfg(not(unix))]
+#[allow(clippy::unnecessary_wraps)] // same signature as the unix function
 fn posix(_file: &File, _path: &Path) -> Result<()> {
     Ok(())
 }
