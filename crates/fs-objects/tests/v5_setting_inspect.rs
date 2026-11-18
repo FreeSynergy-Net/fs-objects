@@ -67,16 +67,11 @@ async fn ka13_inspect_looks_without_touching() {
         SettingRows::new(&s).await.unwrap().rev().await.unwrap();
     }
     assert_eq!(looks(&p, &DOMAIN).await, Fits { found: 5 });
-    // Half of a valid file.
+    // Half of a valid file (the main file only, 2 KiB of the first page): the engine cannot open it.
     let full = std::fs::read(&p).unwrap();
     let half = d.path().join("half.db");
     std::fs::write(&half, &full[..full.len() / 2]).unwrap();
-    assert!(matches!(
-        looks(&half, &DOMAIN).await,
-        Broken {
-            cause: "open" | "integrity" | "registry"
-        }
-    ));
+    assert_eq!(looks(&half, &DOMAIN).await, Broken { cause: "open" });
     // 1 KiB of garbage, a text file, an empty file, a header only.
     let junk = d.path().join("junk.db");
     std::fs::write(&junk, vec![0xA5_u8; 1024]).unwrap();
