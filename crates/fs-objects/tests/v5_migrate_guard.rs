@@ -128,7 +128,10 @@ async fn an_empty_or_cut_state_file_is_an_error_not_a_phase() {
         "backup=x\nend=state\n".to_owned(),
     ] {
         std::fs::write(&state, &damaged).unwrap();
-        let err = MigrationPlan::open(&path).unwrap_err().to_string();
+        let err = MigrationPlan::open(&path)
+            .map(|p| format!("{:?}", p.phase()))
+            .expect_err(&format!("{damaged:?} was accepted"))
+            .to_string();
         assert!(err.contains("damaged"), "{damaged:?} gave {err}");
     }
     std::fs::write(&state, &full).unwrap();
