@@ -233,3 +233,33 @@ async fn the_lock_guard_never_closes_the_descriptor_it_used() {
         "the descriptor of the lock must stay open after the lock is released"
     );
 }
+
+/// K4 (flock part): a released guard leaves no `flock` on the kept descriptor: another handle can take it.
+#[tokio::test]
+async fn k4_a_released_guard_leaves_no_flock() {
+    let dir = Dir::new("keep-k4-flock");
+    let path = v4_file(&dir, good()).await;
+    drop(SourceLock::take(&path).unwrap());
+    let other = std::fs::File::open(&path).unwrap();
+    assert!(
+        other.try_lock().is_ok(),
+        "the flock of the released guard is still held"
+    );
+}
+
+/// K4 (fcntl part): a refused `take` (the `flock` is held by another handle) must not leave its `fcntl` lock
+/// behind: a program that starts afterwards is not kept out by a guard that does not exist.
+#[tokio::test]
+async fn k4_a_refused_take_leaves_no_fcntl_lock() {
+    let dir = Dir::new("keep-k4-fcntl");
+    let path = v4_file(&dir, good()).await;
+    let holder = std::fs::File::open(&path).unwrap();
+    holder.try_lock().unwrap();
+    assert!(
+        SourceLock::take(&path).is_err(),
+        "control: the take is refused"
+    );
+    let got_in = other_process_opens(&path);
+    drop(holder);
+    assert!(got_in, "the refused take left its fcntl lock behind");
+}
