@@ -187,6 +187,66 @@ async fn ka11_put_on_a_locked_key_is_refused() {
     assert_eq!(r.values(0, G, P).await.unwrap().len(), 0);
 }
 
+/// KA11 (all layers): a lock beats every layer (ADR 0100: one lock per key, over all scopes, programs, profiles, places).
+#[tokio::test]
+async fn ka11_a_lock_holds_in_every_scope_profile_and_place() {
+    let s = mem().await;
+    let r = SettingRows::new(&s).await.unwrap();
+    let by = admin();
+    r.change_index::<()>(at(2), &mut |_| {
+        Ok(vec![IndexChange::Create {
+            id: 1,
+            name: "Work".into(),
+            name_key: "work".into(),
+        }])
+    })
+    .await
+    .unwrap()
+    .unwrap();
+    r.lock(
+        "fs.shell.language",
+        &Prim::Text("de".into()),
+        "policy",
+        actor(&by),
+        at(3),
+    )
+    .await
+    .unwrap();
+    let rev = r.rev().await.unwrap();
+    let scopes = [G, ScopeRow::Program("fs-shell")];
+    for profile in [0, 1] {
+        for scope in scopes {
+            for place in [PlaceRow::Profile, PlaceRow::Device] {
+                for v in [Some(Prim::Text("en".into())), None] {
+                    let res = r
+                        .put(
+                            profile,
+                            scope,
+                            place,
+                            "fs.shell.language",
+                            v.as_ref(),
+                            Writer::default(),
+                            at(4),
+                        )
+                        .await;
+                    assert!(
+                        invalid_is(&res, "settings_value.key", "locked"),
+                        "{profile} {scope:?} {place:?} {v:?}: {res:?}"
+                    );
+                }
+            }
+        }
+    }
+    assert_eq!(r.rev().await.unwrap(), rev, "refused writes change nothing");
+    for profile in [0, 1] {
+        for scope in scopes {
+            for place in [PlaceRow::Profile, PlaceRow::Device] {
+                assert!(r.values(profile, scope, place).await.unwrap().is_empty());
+            }
+        }
+    }
+}
+
 /// KA14: a future cancelled inside the write is rolled back at the next access: the rev is the same, no value.
 #[tokio::test]
 async fn ka14_a_cancelled_put_rolls_back() {

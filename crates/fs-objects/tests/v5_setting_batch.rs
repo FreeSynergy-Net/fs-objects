@@ -119,6 +119,48 @@ async fn ka19_a_good_batch_is_one_write() {
     );
 }
 
+/// KA18 (reason): a batch with a lock or unlock whose reason is only blanks is refused with `reason-missing`, as the single
+/// calls do, and writes NOTHING (not even the operations before it).
+#[tokio::test]
+async fn ka18_a_blank_reason_in_a_batch_is_refused_and_writes_nothing() {
+    let s = mem().await;
+    let r = SettingRows::new(&s).await.unwrap();
+    let by = admin();
+    let a = actor(&by);
+    r.lock("k", &Prim::Int(1), "policy", a, at(2))
+        .await
+        .unwrap();
+    let rev = r.rev().await.unwrap();
+    let logs = r.log(None, 10).await.unwrap().len();
+    for bad in ["  ", "", "\t\n"] {
+        let lock = SettingOp::Lock {
+            key: "other",
+            v: Prim::Int(2),
+            reason: bad,
+        };
+        let unlock = SettingOp::Unlock {
+            key: "k",
+            reason: bad,
+        };
+        let unlock_free = SettingOp::Unlock {
+            key: "never-locked",
+            reason: bad,
+        };
+        for op in [lock, unlock, unlock_free] {
+            let res = r.apply(&[put(0, "a", 1), op], Some(a), at(3)).await;
+            assert!(
+                invalid_is(&res, "settings_instance_lock.reason", "reason-missing"),
+                "{bad:?}: {res:?}"
+            );
+            assert_eq!(r.rev().await.unwrap(), rev);
+            assert!(r.values(0, G, PlaceRow::Profile).await.unwrap().is_empty());
+            let i = r.instance().await.unwrap();
+            assert_eq!(i.locks.len(), 1, "the lock on k stays, no lock on other");
+            assert_eq!(r.log(None, 10).await.unwrap().len(), logs);
+        }
+    }
+}
+
 /// KA20: an instance operation without an actor is refused, nothing written.
 #[tokio::test]
 async fn ka20_instance_operation_needs_an_actor() {

@@ -1,17 +1,16 @@
 //! `Store::inspect`: what a store file is, found WITHOUT changing it (PLAN section 5.4 (3): a broken or newer file stays
 //! byte-identical, nothing is created, nothing is deleted).
 //!
-//! Pattern: Facade over a probe on a throw-away copy. How: `turso` 0.8.3 has no read-only open and `Store::open` writes
-//! (`bootstrap`), so the file (and its `-wal`) is copied into a fresh folder beside it, the copy is looked at, and the folder is
-//! removed again. The original is only read. Written by Claude (Anthropic) as a probe; see CHANGELOG.
+//! Pattern: Facade over a read-only probe. How: `Store::open` writes (`bootstrap`), so the file is opened with `turso`'s
+//! `Builder::read_only(true)` (turso 0.8.3, `src/lib.rs`): no copy, no folder, nothing to clean up, the original is only read.
+//! Written by Claude (Anthropic) as a probe; see CHANGELOG.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use turso::{Builder, Connection, Value};
 
-use super::codec::{Row, get_int, get_text, id_text, text};
-use super::error::{Error, Result};
-use super::id::new_id;
+use super::codec::{Row, get_int, get_text, text};
+use super::error::Result;
 use super::registry::{Domain, OWN};
 use super::store::Store;
 
@@ -50,7 +49,7 @@ impl Store {
     /// this program may open. A damaged copy that makes the engine fail or panic is `Broken { cause: "open" }`.
     ///
     /// # Errors
-    /// Never for a broken file (that is `Broken`); `Unavailable` only when the folder cannot be written for the probe copy.
+    /// Never for a broken file (that is `Broken`); the `Result` is kept for later causes (the signature is stable).
     pub async fn inspect(path: &str, domain: &Domain) -> Result<Inspect> {
         let p = Path::new(path);
         let Ok(meta) = std::fs::symlink_metadata(p) else {
@@ -76,10 +75,7 @@ impl Store {
         if !header_ok(p) {
             return Ok(Inspect::Broken { cause: "header" });
         }
-        let dir = scratch_dir(p)?;
-        let outcome = probe(p, &dir, domain).await;
-        let _ = std::fs::remove_dir_all(&dir);
-        outcome
+        Ok(probe(p, domain).await)
     }
 }
 
@@ -92,29 +88,8 @@ fn header_ok(p: &Path) -> bool {
         && &head == MAGIC
 }
 
-/// A fresh folder beside the file (same disk, never `/tmp`), named by a random id.
-fn scratch_dir(p: &Path) -> Result<PathBuf> {
-    let parent = p
-        .parent()
-        .filter(|d| !d.as_os_str().is_empty())
-        .unwrap_or(Path::new("."));
-    let id = id_text(new_id(0)?);
-    let dir = parent.join(format!(".inspect-{id}"));
-    std::fs::create_dir(&dir).map_err(|e| Error::Unavailable(format!("probe folder: {e}")))?;
-    Ok(dir)
-}
-
-async fn probe(p: &Path, dir: &Path, d: &Domain) -> Result<Inspect> {
-    let copy = dir.join("probe.db");
-    if std::fs::copy(p, &copy).is_err() {
-        return Ok(Inspect::Broken { cause: "open" });
-    }
-    let mut wal = p.as_os_str().to_owned();
-    wal.push("-wal");
-    if Path::new(&wal).is_file() {
-        let _ = std::fs::copy(&wal, dir.join("probe.db-wal"));
-    }
-    let name = copy.to_string_lossy().into_owned();
+async fn probe(p: &Path, d: &Domain) -> Inspect {
+    let name = p.to_string_lossy().into_owned();
     let prefix = d.prefix;
     let fingerprints: Vec<String> = d
         .steps
@@ -123,7 +98,7 @@ async fn probe(p: &Path, dir: &Path, d: &Domain) -> Result<Inspect> {
         .collect();
     // A panic in the engine on a damaged copy must not take the caller down: isolate it in a task.
     let task = tokio::spawn(async move { look(&name, prefix, &fingerprints).await });
-    Ok(task.await.unwrap_or(Inspect::Broken { cause: "open" }))
+    task.await.unwrap_or(Inspect::Broken { cause: "open" })
 }
 
 async fn rows(c: &Connection, sql: &str, params: Vec<Value>) -> Option<Vec<Row>> {
@@ -140,9 +115,9 @@ async fn rows(c: &Connection, sql: &str, params: Vec<Value>) -> Option<Vec<Row>>
     Some(out)
 }
 
-async fn look(copy: &str, prefix: &str, prints: &[String]) -> Inspect {
+async fn look(path: &str, prefix: &str, prints: &[String]) -> Inspect {
     let broken = |cause| Inspect::Broken { cause };
-    let Ok(db) = Builder::new_local(copy).build().await else {
+    let Ok(db) = Builder::new_local(path).read_only(true).build().await else {
         return broken("open");
     };
     let Ok(c) = db.connect() else {
