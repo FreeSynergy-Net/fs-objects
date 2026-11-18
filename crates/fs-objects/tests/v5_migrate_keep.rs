@@ -202,3 +202,34 @@ async fn a2_fall_back_leaves_the_open_programs_lock_on_the_new_file() {
         "fall_back took the lock of the program on the new file"
     );
 }
+
+/// How many descriptors of this process point at the file (Linux).
+#[cfg(target_os = "linux")]
+fn open_descriptors_of(path: &Path) -> usize {
+    let want = std::fs::canonicalize(path).unwrap();
+    std::fs::read_dir("/proc/self/fd")
+        .unwrap()
+        .filter_map(|e| std::fs::read_link(e.unwrap().path()).ok())
+        .filter(|t| *t == want)
+        .count()
+}
+
+/// The lock is taken and released on a descriptor that stays open: closing it would drop the `fcntl` locks of any
+/// other user of the file in this process. (A guard that opened its own descriptor leaves none behind.)
+#[cfg(target_os = "linux")]
+#[tokio::test]
+async fn the_lock_guard_never_closes_the_descriptor_it_used() {
+    let dir = Dir::new("keep-fd");
+    let path = v4_file(&dir, good()).await;
+    assert_eq!(
+        open_descriptors_of(&path),
+        0,
+        "control: nothing holds the file"
+    );
+    drop(SourceLock::take(&path).unwrap());
+    assert_eq!(
+        open_descriptors_of(&path),
+        1,
+        "the descriptor of the lock must stay open after the lock is released"
+    );
+}
