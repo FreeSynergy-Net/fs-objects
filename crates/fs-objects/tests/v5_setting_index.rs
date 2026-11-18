@@ -180,8 +180,15 @@ async fn ka8_concurrent_creations_get_distinct_ids() {
             .unwrap()
             .unwrap()
     };
-    let (a, b) = tokio::join!(make("Work"), make("Talk"));
+    // Read and write really interleave: the connection is held, both calls queue on it (the first one queued first), then it is
+    // released. A change that reads the index BEFORE `begin` would give both the stale `top` 0 and a clash on id 1.
+    let held = s.read().await;
+    let (a, b, ()) = tokio::join!(make("Work"), make("Talk"), async move {
+        tokio::task::yield_now().await;
+        drop(held);
+    });
     assert_ne!(a.top, b.top);
+    assert_eq!((a.top, b.top), (1, 2), "the second sees the first's id");
     let mut ids: Vec<i64> = r
         .index()
         .await
