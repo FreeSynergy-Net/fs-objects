@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 use sha2::{Digest, Sha256};
 
+use super::keep::reader;
+
 use crate::v5::error::{Error, Result};
 
 fn io(what: &str, e: &std::io::Error) -> Error {
@@ -44,20 +46,21 @@ pub(super) fn feed(r: &mut impl Read, h: &mut Sha256) -> std::io::Result<()> {
     }
 }
 
-fn feed_file(path: &Path, h: &mut Sha256, what: &str) -> Result<()> {
-    let mut f = fs::File::open(path).map_err(|e| io(what, &e))?;
+/// `keep`: read through the never-closed descriptor (store files), see `keep.rs`.
+fn feed_file(path: &Path, h: &mut Sha256, what: &str, keep: bool) -> Result<()> {
+    let mut f = reader(path, keep).map_err(|e| io(what, &e))?;
     feed(&mut f, h).map_err(|e| io(what, &e))
 }
 
-fn sha(path: &Path) -> Result<Vec<u8>> {
+fn sha(path: &Path, keep: bool) -> Result<Vec<u8>> {
     let mut h = Sha256::new();
-    feed_file(path, &mut h, "read for the checksum")?;
+    feed_file(path, &mut h, "read for the checksum", keep)?;
     Ok(h.finalize().to_vec())
 }
 
-/// The copy must have the same SHA-256 as the original.
-pub(super) fn verify_copy(from: &Path, to: &Path) -> Result<()> {
-    if sha(from)? == sha(to)? {
+/// The copy must have the same SHA-256 as the original (`keep`: the original is a store file).
+fn verify_copy_of(from: &Path, to: &Path, keep: bool) -> Result<()> {
+    if sha(from, keep)? == sha(to, false)? {
         Ok(())
     } else {
         Err(Error::Unavailable(
@@ -67,8 +70,8 @@ pub(super) fn verify_copy(from: &Path, to: &Path) -> Result<()> {
 }
 
 /// Copy to a NEW file. A copy that fails after it was created is removed again (it is this run's own file).
-fn copy_new(from: &Path, to: &Path) -> Result<()> {
-    let mut src = fs::File::open(from).map_err(|e| io("read the v4 file", &e))?;
+fn copy_new(from: &Path, to: &Path, keep: bool) -> Result<()> {
+    let mut src = reader(from, keep).map_err(|e| io("read the v4 file", &e))?;
     let mut f = fs::OpenOptions::new()
         .write(true)
         .create_new(true)
@@ -78,11 +81,16 @@ fn copy_new(from: &Path, to: &Path) -> Result<()> {
         .map(|_| ())
         .and_then(|()| f.sync_all())
         .map_err(|e| io("write the backup", &e))
-        .and_then(|()| verify_copy(from, to));
+        .and_then(|()| verify_copy_of(from, to, keep));
     if done.is_err() {
         let _ = fs::remove_file(to);
     }
     done
+}
+
+/// The copy must have the same SHA-256 as the original.
+pub(super) fn verify_copy(from: &Path, to: &Path) -> Result<()> {
+    verify_copy_of(from, to, false)
 }
 
 /// SHA-256 (hex) over the file and, when there is one, its `-wal` file: what a person or a program changed in a
@@ -92,11 +100,16 @@ fn copy_new(from: &Path, to: &Path) -> Result<()> {
 /// `Unavailable` when a file cannot be read.
 pub fn fingerprint(path: &Path) -> Result<String> {
     let mut h = Sha256::new();
-    feed_file(path, &mut h, "read for the fingerprint")?;
+    feed_file(path, &mut h, "read for the fingerprint", true)?;
     let wal = PathBuf::from(format!("{}-wal", path.display()));
     if wal.is_file() {
         h.update(b"\0wal\0");
-        feed_file(&wal, &mut h, "read the -wal file for the fingerprint")?;
+        feed_file(
+            &wal,
+            &mut h,
+            "read the -wal file for the fingerprint",
+            false,
+        )?;
     }
     Ok(h.finalize().iter().fold(String::new(), |mut a, b| {
         let _ = write!(a, "{b:02x}");
@@ -110,10 +123,10 @@ pub fn fingerprint(path: &Path) -> Result<String> {
 /// `Unavailable` when the file cannot be read, the copy cannot be created, or the copy differs.
 pub fn backup_file(v4: &Path) -> Result<PathBuf> {
     let to = unique_sibling(v4, ".v4.bak");
-    copy_new(v4, &to)?;
+    copy_new(v4, &to, true)?;
     let wal = PathBuf::from(format!("{}-wal", v4.display()));
     if wal.exists()
-        && let Err(e) = copy_new(&wal, &PathBuf::from(format!("{}-wal", to.display())))
+        && let Err(e) = copy_new(&wal, &PathBuf::from(format!("{}-wal", to.display())), false)
     {
         let _ = fs::remove_file(&to);
         return Err(e);
