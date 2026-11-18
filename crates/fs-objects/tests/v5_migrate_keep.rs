@@ -22,7 +22,7 @@ async fn child_tries_to_open() {
     let Ok(path) = std::env::var("FS_TRY_OPEN") else {
         return;
     };
-    let opened = if path.ends_with(".v5") {
+    let opened = if Path::new(&path).extension().is_some_and(|e| e == "v5") {
         fs_objects::v5::Store::open(&path, NOW)
             .await
             .map(|_| ())
