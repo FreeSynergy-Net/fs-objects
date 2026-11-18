@@ -88,7 +88,8 @@ fn copy_new(from: &Path, to: &Path, keep: bool) -> Result<()> {
     done
 }
 
-/// The copy must have the same SHA-256 as the original.
+/// The copy must have the same SHA-256 as the original (an ordinary read; the unit tests use it).
+#[cfg(test)]
 pub(super) fn verify_copy(from: &Path, to: &Path) -> Result<()> {
     verify_copy_of(from, to, false)
 }

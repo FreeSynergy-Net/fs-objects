@@ -91,3 +91,23 @@ fn a_copy_that_differs_is_refused_and_an_equal_one_passes() {
     );
     let _ = std::fs::remove_dir_all(&d);
 }
+
+#[cfg(unix)]
+#[test]
+fn a_file_that_was_replaced_is_read_again_and_one_that_was_changed_in_place_too() {
+    let d = folder("rep");
+    let file = d.join("x.db");
+    std::fs::write(&file, data(100)).unwrap();
+    let first = fingerprint(&file).unwrap();
+    std::fs::write(&file, data(101)).unwrap();
+    let in_place = fingerprint(&file).unwrap();
+    assert_ne!(first, in_place, "a change in place must show");
+    std::fs::remove_file(&file).unwrap();
+    std::fs::write(&file, data(102)).unwrap();
+    let replaced = fingerprint(&file).unwrap();
+    assert_ne!(
+        in_place, replaced,
+        "a replaced file (new inode) must be read, not the old one"
+    );
+    let _ = std::fs::remove_dir_all(&d);
+}
