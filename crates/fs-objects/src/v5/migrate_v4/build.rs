@@ -10,6 +10,7 @@ use turso::Value;
 
 use super::carry::{ORIGINAL_TABLE, not_carried, original_row, verify_extras};
 use super::convert::{Converted, Converter};
+use super::read;
 use super::report::{Held, Report};
 use crate::v5::codec::{id_text, id_value, int, invalid, opt_text, parse_id, text};
 use crate::v5::id::from_v4;
@@ -193,31 +194,38 @@ pub(super) async fn build(
     let started = Instant::now();
     let store = Store::open(target, now_ms).await?;
     store.register_domain(&conv.domain(), now_ms).await?;
-    let all = V4Store::query(v4, &crate::Query::new())
-        .await
-        .map_err(|e| Error::Unavailable(e.to_string()))?;
-    for o in all {
-        let kind = o.envelope.object_type.clone();
-        let id = id_text(from_v4(o.envelope.id));
-        let verdict = if let Some(why) = not_carried(&o, conv) {
-            Outcome::Held(why)
-        } else if !conv.handles(&kind) {
-            Outcome::Held(format!("no converter for the type {kind}"))
-        } else {
-            match conv.to_rows(&o) {
-                Err(h) => Outcome::Held(h.0),
-                Ok(out) => one(&store, conv, &o, out, &mut report.rounded).await?,
+    let total = read::total(v4).await?;
+    let (mut problems, mut seen, mut offset) = (Vec::new(), 0_usize, 0_usize);
+    while offset < total {
+        let len = read::PAGE.min(total - offset);
+        let (objects, refused) = read::read_page(v4, offset, len).await?;
+        seen += objects.len() + refused.len();
+        problems.extend(refused);
+        for o in objects {
+            let kind = o.envelope.object_type.clone();
+            let id = id_text(from_v4(o.envelope.id));
+            let verdict = if let Some(why) = not_carried(&o, conv) {
+                Outcome::Held(why)
+            } else if !conv.handles(&kind) {
+                Outcome::Held(format!("no converter for the type {kind}"))
+            } else {
+                match conv.to_rows(&o) {
+                    Err(h) => Outcome::Held(h.0),
+                    Ok(out) => one(&store, conv, &o, out, &mut report.rounded).await?,
+                }
+            };
+            match verdict {
+                Outcome::Done => *report.converted.entry(kind).or_default() += 1,
+                Outcome::Held(reason) => report.held.push(Held { id, kind, reason }),
             }
-        };
-        match verdict {
-            Outcome::Done => *report.converted.entry(kind).or_default() += 1,
-            Outcome::Held(reason) => report.held.push(Held { id, kind, reason }),
+            *report
+                .skipped
+                .entry("search index fields (derived, rebuilt from the typed rows)".into())
+                .or_default() += o.index.values().map(Vec::len).sum::<usize>();
         }
-        *report
-            .skipped
-            .entry("search index fields (derived, rebuilt from the typed rows)".into())
-            .or_default() += o.index.values().map(Vec::len).sum::<usize>();
+        offset += len;
     }
+    read::reconcile(report, total, seen, &problems)?;
     let n = V4Store::log_stats(v4)
         .await
         .map_err(|e| Error::Unavailable(e.to_string()))?;

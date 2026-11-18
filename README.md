@@ -21,7 +21,7 @@ Latest tag: `v0.0.6` (the next release is 0.0.8).
 
 ## What is not there yet
 
-- Migration v4 to v5 is a scaffold (`v5::migrate_v4`: backup, new file, per-program converter, round trip, report, switch after a person confirms); the source is only read (read-only open, schema version must be 4, exclusive lock: the program must be closed), an aborted run removes what it made, the fall-back from the new file refuses to lose changes; the original is carried; no program has a real converter yet, and the v4 activity history, addressing and protection are not carried over yet (held back or reported). `v5::check::typed` checks a v5 file against ADR 0086.
+- Migration v4 to v5 is a scaffold (`v5::migrate_v4`: backup, new file, per-program converter, round trip, report, switch after a person confirms); the source is only read (read-only open, schema version must be 4, advisory locks of the kind the engine takes: the program must be closed; checked with a real program in another process, Windows not checked yet), an aborted run removes what it made, the fall-back from the new file refuses to lose changes; the original is carried; no program has a real converter yet, and the v4 activity history, addressing and protection are not carried over yet (held back or reported). `v5::check::typed` checks a v5 file against ADR 0086.
 - No key vault, so keys come from the caller.
 - Search is substring and prefix only; full-text search is not switched on.
 - No remote (HTTPS) store. Large originals are a draft and answer "not supported".
