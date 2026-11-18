@@ -153,7 +153,7 @@ async fn ka18_a_blank_reason_in_a_batch_is_refused_and_writes_nothing() {
                 "{bad:?}: {res:?}"
             );
             assert_eq!(r.rev().await.unwrap(), rev);
-            assert!(r.values(0, G, PlaceRow::Profile).await.unwrap().is_empty());
+            assert_eq!(r.values(0, G, PlaceRow::Profile).await.unwrap().len(), 0);
             let i = r.instance().await.unwrap();
             assert_eq!(i.locks.len(), 1, "the lock on k stays, no lock on other");
             assert_eq!(r.log(None, 10).await.unwrap().len(), logs);

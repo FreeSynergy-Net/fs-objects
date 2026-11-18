@@ -241,7 +241,7 @@ async fn ka11_a_lock_holds_in_every_scope_profile_and_place() {
     for profile in [0, 1] {
         for scope in scopes {
             for place in [PlaceRow::Profile, PlaceRow::Device] {
-                assert!(r.values(profile, scope, place).await.unwrap().is_empty());
+                assert_eq!(r.values(profile, scope, place).await.unwrap().len(), 0);
             }
         }
     }
