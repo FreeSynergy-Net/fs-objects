@@ -2,6 +2,11 @@
 
 Version = tag.
 
+## 0.0.10
+
+- Only pins and the address change: the `fs-types` git URL is now `https://github.com/FreeSynergy-Net/fs-types` (tag `v0.0.6` unchanged), the workflow pins to `fs-release` are raised to `9eed5c95eb7311f2b68266a012ec778f51e3ac38` (v0.0.18). The lock holds exactly one `fs-types` source (the Net URL). No code change.
+- Auf Deutsch: Nur Pins und Adresse aendern sich: die git-URL von `fs-types` ist jetzt `https://github.com/FreeSynergy-Net/fs-types` (Tag `v0.0.6` unveraendert), die Workflow-Pins auf `fs-release` stehen auf `9eed5c95eb7311f2b68266a012ec778f51e3ac38` (v0.0.18). Die Sperrdatei enthaelt genau eine `fs-types`-Quelle (die Net-URL). Kein Code geaendert.
+
 ## 0.0.9
 
 - Only the pin changes: `fs-types` is lifted to the tag `v0.0.6` (was `v0.0.4`); the git URL stays `https://github.com/FreeSynergy/fs-types` (the URL change follows later in one wave). No code change.
