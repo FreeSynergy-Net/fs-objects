@@ -2,6 +2,11 @@
 
 Version = tag.
 
+## 0.0.9
+
+- Only the pin changes: `fs-types` is lifted to the tag `v0.0.6` (was `v0.0.4`); the git URL stays `https://github.com/FreeSynergy/fs-types` (the URL change follows later in one wave). No code change.
+- Auf Deutsch: Nur der Pin aendert sich: `fs-types` steht auf Tag `v0.0.6` (vorher `v0.0.4`); die git-URL bleibt `https://github.com/FreeSynergy/fs-types` (die URL-Umstellung folgt spaeter in einer Welle). Kein Code geaendert.
+
 ## 0.0.8
 
 NOTE / HINWEIS: The migrator (`v5::migrate_v4`) stays unchanged and UNUSED. The lock gap (A1/A2) is closed in this release, but by the user's rule (W3, 2026-11-18) there is no data migration or rescue until the first real users exist, and no program has a real converter; so do not use it until then. / Der Umwandler (`v5::migrate_v4`) bleibt unveraendert und UNGENUTZT. Die Sperr-Luecke (A1/A2) ist in dieser Version geschlossen, aber nach der Nutzerregel (W3, 18.11.2026) gibt es keine Datenmigration und keine Rettung, bis es erste echte Nutzer gibt, und kein Programm hat einen echten Umwandler; bis dahin nicht benutzen.
