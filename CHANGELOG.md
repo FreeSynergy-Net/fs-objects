@@ -4,6 +4,8 @@ Version = tag.
 
 ## 0.0.11
 
+- fs-types lifted from tag v0.0.6 to rev 722d3ce (one fs-types in the lock). `Attendee` is `#[non_exhaustive]` there: `log_codec::encode` refuses an unknown attendee kind with `Invalid` (`activity_change.attendee`) instead of storing it in part. `.cargo/config.toml` names the registry `freesynergy` (fs-types crates need it).
+- Auf Deutsch: fs-types von Tag v0.0.6 auf rev 722d3ce gehoben (ein fs-types im Lock). `Attendee` ist dort `#[non_exhaustive]`: `log_codec::encode` lehnt eine unbekannte Teilnehmer-Art mit `Invalid` ab (geschlossen), statt sie halb zu speichern. `.cargo/config.toml` nennt die Registry `freesynergy`.
 BREAKING (named, see DESIGN.md "Schema 5"): every write needs an owner. A store opened without `OpenOptions::with_owner` refuses `put`, `put_and_log`, `delete`, `undo`, `redo`, `revert_by`, `write_by`, `put_unlogged` and `log` at run time (`Invalid("store has no owner ...")`). The fix is one line per program: `OpenOptions::default().with_owner(person)`; in tests `fs_objects::testing::owner()` (feature `testing`). New fields on `Activity` and `StoredObject` break foreign struct literals.
 
 - Fixes after review: `write_by` refuses a non-UUIDv7 object id; `rev` continues after delete + undo/redo/put (no ABA with `expect`), a restored image keeps its owner; `put_unlogged` and `log` need an owner, `put_unlogged` refuses self-ownership outside `birth`.

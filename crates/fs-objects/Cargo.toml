@@ -14,7 +14,7 @@ v5 = ["dep:getrandom"]
 
 [dependencies]
 # Shared basic types (ADR 0085, draft rule R13): no second copy of the time, person or id types here. Required since schema 5 (the owner of every change is a `PersonRef`).
-fs-types = { git = "https://github.com/FreeSynergy-Net/fs-types", tag = "v0.0.6" }
+fs-types = { git = "https://github.com/FreeSynergy-Net/fs-types", rev = "722d3ce0156711d40cb278f2e835e865d9448290" }
 # OS randomness for UUIDv7 ids (already in the lock through the engine).
 getrandom = { version = "0.3", optional = true }
 # Pre-1.0 and API-churning: pinned exactly (see DESIGN.md).

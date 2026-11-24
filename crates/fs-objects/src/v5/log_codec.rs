@@ -9,7 +9,8 @@ use turso::Value;
 
 use super::codec::{
     Row, art_of, damaged, date_to_int, get_int, get_opt_text, get_text, id_text, int_to_date,
-    int_to_local, local_to_int, parse_id, person_of, person_values, reference_of, text, zone_of,
+    int_to_local, invalid, local_to_int, parse_id, person_of, person_values, reference_of, text,
+    zone_of,
 };
 use super::error::Result;
 
@@ -112,6 +113,10 @@ pub fn encode(v: Option<&LogValue>) -> Result<(Option<&'static str>, [Value; SID
         LogValue::Attendee(Attendee::Location(r)) => {
             (c[6], c[7]) = (text("location"), text(&r.canonical()));
             "attendee"
+        }
+        // `Attendee` is non_exhaustive: a kind this store cannot write is refused, never stored in part (fail closed).
+        LogValue::Attendee(_) => {
+            return Err(invalid("activity_change.attendee", "unknown attendee kind"));
         }
     };
     Ok((Some(kind), c))
