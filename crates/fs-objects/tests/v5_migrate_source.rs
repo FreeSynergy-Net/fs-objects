@@ -41,17 +41,17 @@ async fn only_a_v4_file_is_accepted_and_a_refused_file_stays_byte_for_byte() {
     let d3 = Dir::new("fs-objects-src-v3");
     let p3 = v4_file(&d3, good()).await;
     sql(&p3, "UPDATE schema_version SET version = 3").await;
-    refused(&d3, &p3, "schema version 3, expected 4").await;
-    // Version 5 (newer than this crate).
+    refused(&d3, &p3, "schema version 3, expected 5").await;
+    // Version 6 (newer than this crate).
     let d5 = Dir::new("fs-objects-src-v5");
     let p5 = v4_file(&d5, good()).await;
-    sql(&p5, "UPDATE schema_version SET version = 5").await;
-    refused(&d5, &p5, "schema version 5, expected 4").await;
+    sql(&p5, "UPDATE schema_version SET version = 6").await;
+    refused(&d5, &p5, "schema version 6, expected 5").await;
     // Version 0: a database without any store table.
     let d0 = Dir::new("fs-objects-src-v0");
     let p0 = d0.file("objects.db");
     sql(&p0, "CREATE TABLE other (x INTEGER)").await;
-    refused(&d0, &p0, "schema version 0, expected 4").await;
+    refused(&d0, &p0, "schema version 0, expected 5").await;
     // An empty file and a foreign file.
     let de = Dir::new("fs-objects-src-empty");
     let pe = de.file("objects.db");
@@ -73,7 +73,7 @@ async fn only_a_v4_file_is_accepted_and_a_refused_file_stays_byte_for_byte() {
             .await
             .unwrap(),
     );
-    refused(&dv, &pv, "expected 4").await;
+    refused(&dv, &pv, "expected 5").await;
 }
 
 #[tokio::test]

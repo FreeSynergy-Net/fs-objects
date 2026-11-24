@@ -37,10 +37,13 @@ pub mod v5;
 
 pub use crypto::{Cipher, EncryptionKey, KeyProvider, StaticKeyProvider};
 pub use error::{Error, Result};
+pub use fs_types::PersonRef;
 pub use model::{
     Activity, ActivityId, ActivityKind, Blob, ChangeSet, DpvCategory, Envelope, IndexFields,
     ObjectId, StoreId, StoredObject, Timestamp,
 };
+pub use model::{By, FieldClash, Origin, Outcome, Recorded, Write};
+pub(crate) use model::{art_word, person_from};
 pub use store::{
     ActivityFilter, CompactionReport, Cond, LargeOriginals, LogEntry, LogStats, Op, Order,
     OriginalRef, PurgeReport, Query, Retention, Store, StoreInfo, TimeField, UndoState,

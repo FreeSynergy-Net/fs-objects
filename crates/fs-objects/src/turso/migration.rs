@@ -3,17 +3,18 @@
 //! Pattern: Template method — detect the current version, then run the one matching step inside
 //! a single transaction (`in_tx`); newer databases are refused.
 
+use fs_types::BasicValue as _;
 use turso::{Connection, Value};
 
 use super::identity::ensure_identity;
 use super::rows::{opt_int, text};
-use super::schema::{INDEXES, SCHEMA, SCHEMA_VERSION, V3_ALTER, V3_TABLES};
+use super::schema::{INDEXES, SCHEMA, SCHEMA_VERSION, V3_ALTER, V3_TABLES, V5_ALTER};
 use super::sql::{collect, exec};
 use super::tx::in_tx;
-use crate::{Error, Result, sort_key};
+use crate::{Error, PersonRef, Result, art_word, sort_key};
 
 /// Bring the database to [`SCHEMA_VERSION`]: create it, or migrate a 0.1 database.
-pub(super) async fn migrate(c: &Connection) -> Result<()> {
+pub(super) async fn migrate(c: &Connection, owner: Option<&PersonRef>) -> Result<()> {
     // The version is read inside the transaction: of several first opens at once, the later ones see the
     // finished schema and do nothing (`in_tx` waits for the writer lock).
     in_tx(c, async {
@@ -32,7 +33,10 @@ pub(super) async fn migrate(c: &Connection) -> Result<()> {
             if current == 1 {
                 v1_to_v2(c).await?;
             }
-            v2_to_v4(c).await?;
+            if current < 4 {
+                v2_to_v4(c).await?;
+            }
+            v4_to_v5(c, owner).await?;
         }
         ensure_identity(c).await?;
         c.execute_batch(INDEXES).await?;
@@ -117,6 +121,45 @@ async fn v2_to_v4(c: &Connection) -> Result<()> {
         .any(|r| text(&r[0]).is_ok_and(|n| n == "redacted"));
     if !has_redacted {
         c.execute_batch(V3_ALTER).await?;
+    }
+    Ok(())
+}
+
+/// 4 -> 5: owner, revision and origin columns. Existing rows get the owner the store is opened with (empty if it
+/// is opened without one: they read as `owner: None`), revision 1 on objects, and no origin. Unique step index and
+/// the origin indexes come with `INDEXES` right after.
+async fn v4_to_v5(c: &Connection, owner: Option<&PersonRef>) -> Result<()> {
+    // Each column only if missing (a file that was opened half-way, or a test file with a lowered version).
+    for sql in V5_ALTER {
+        let mut words = sql.split_whitespace().skip(2);
+        let (table, column) = (
+            words.next().unwrap_or_default(),
+            words.nth(2).unwrap_or_default(),
+        );
+        let cols = collect(
+            c,
+            &format!("SELECT name FROM pragma_table_info('{table}')"),
+            vec![],
+        )
+        .await?;
+        if !cols.iter().any(|r| text(&r[0]).is_ok_and(|n| n == column)) {
+            exec(c, sql, vec![]).await?;
+        }
+    }
+    if let Some(p) = owner {
+        let vals = || {
+            vec![
+                Value::Text(p.id.canonical()),
+                Value::Text(art_word(p.art).into()),
+            ]
+        };
+        exec(c, "UPDATE objects SET owner_id = ?, owner_art = ?", vals()).await?;
+        exec(
+            c,
+            "UPDATE activities SET owner_id = ?, owner_art = ?",
+            vals(),
+        )
+        .await?;
     }
     Ok(())
 }

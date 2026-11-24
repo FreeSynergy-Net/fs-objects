@@ -10,9 +10,10 @@ use async_trait::async_trait;
 use tokio::sync::broadcast;
 
 use crate::{
-    Activity, ActivityFilter, ActivityId, ActivityKind, ActivityLog, ChangeFeed, CompactionReport,
-    HistoryRetention, LogEntry, LogStats, ObjectId, ObjectQuery, ObjectRepository, PurgeReport,
-    Query, Result, Retention, StoreId, StoreInfo, StoredObject, Timestamp, UndoRedo, UndoState,
+    Activity, ActivityFilter, ActivityId, ActivityKind, ActivityLog, By, ChangeFeed,
+    CompactionReport, HistoryRetention, LogEntry, LogStats, ObjectId, ObjectQuery,
+    ObjectRepository, Outcome, PurgeReport, Query, Result, Retention, StoreId, StoreInfo,
+    StoredObject, Timestamp, UndoRedo, UndoState, Write,
 };
 
 /// Object store: objects + append-only activity log, every change atomic with its log entry.
@@ -30,6 +31,8 @@ pub trait Store: Send + Sync {
         actor: &str,
         extra: Vec<LogEntry>,
     ) -> Result<Vec<Activity>>;
+    /// See [`ObjectRepository::write_by`].
+    async fn write_by(&self, by: &By, writes: Vec<Write>) -> Result<Outcome>;
     /// See [`ObjectRepository::get`].
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>>;
     /// See [`ObjectRepository::delete`].
@@ -110,6 +113,9 @@ where
         extra: Vec<LogEntry>,
     ) -> Result<Vec<Activity>> {
         ObjectRepository::put_and_log(self, object, actor, extra).await
+    }
+    async fn write_by(&self, by: &By, writes: Vec<Write>) -> Result<Outcome> {
+        ObjectRepository::write_by(self, by, writes).await
     }
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>> {
         ObjectRepository::get(self, id).await

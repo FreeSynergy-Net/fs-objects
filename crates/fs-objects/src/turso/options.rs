@@ -5,7 +5,7 @@
 
 use std::sync::Arc;
 
-use crate::KeyProvider;
+use crate::{KeyProvider, PersonRef};
 
 /// Options for opening a [`TursoStore`](super::TursoStore).
 #[derive(Clone)]
@@ -19,6 +19,19 @@ pub struct OpenOptions {
     pub allow_sensitive_unencrypted: bool,
     /// Capacity of the change-stream channel.
     pub subscribe_capacity: usize,
+    /// The owner of the store: every object and activity written belongs to this person. `write_by` refuses
+    /// without it; there is no empty owner and no default one. Existing rows of an older file get it on the
+    /// first open.
+    pub owner: Option<PersonRef>,
+}
+
+impl OpenOptions {
+    /// Builder: set the owner of the store.
+    #[must_use]
+    pub fn with_owner(mut self, owner: PersonRef) -> Self {
+        self.owner = Some(owner);
+        self
+    }
 }
 
 impl Default for OpenOptions {
@@ -28,6 +41,7 @@ impl Default for OpenOptions {
             key_provider: None,
             allow_sensitive_unencrypted: false,
             subscribe_capacity: 1024,
+            owner: None,
         }
     }
 }

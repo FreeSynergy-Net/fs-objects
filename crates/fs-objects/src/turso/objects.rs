@@ -3,13 +3,14 @@
 //! Pattern: Repository (internal) — the only module that knows the `objects` / `index_fields`
 //! table layout; the trait impls above it work with `StoredObject`s.
 
+use fs_types::BasicValue as _;
 use turso::{Connection, Value};
 
 use super::codec::decode_object;
 use super::rows::{opt_text_val, opt_ts_val, text};
 use super::schema::OBJECT_COLS;
 use super::sql::{collect, exec};
-use crate::{ObjectId, Result, StoredObject, sort_key};
+use crate::{ObjectId, Result, StoredObject, art_word, sort_key};
 
 /// Fill the `index` map of each object from `index_fields` (in chunks).
 pub(super) async fn attach_index(c: &Connection, objs: &mut [StoredObject]) -> Result<()> {
@@ -70,7 +71,7 @@ pub(super) async fn write_object(c: &Connection, o: &StoredObject) -> Result<()>
     exec(
         c,
         &format!(
-            "INSERT INTO objects ({OBJECT_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            "INSERT INTO objects ({OBJECT_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
         ),
         vec![
             Value::Text(id.clone()),
@@ -92,6 +93,9 @@ pub(super) async fn write_object(c: &Connection, o: &StoredObject) -> Result<()>
             opt_ts_val(e.start_time),
             opt_ts_val(e.end_time),
             Value::Text(sort_key(&e.name)),
+            Value::Text(o.owner.as_ref().map_or_else(String::new, |p| p.id.canonical())),
+            Value::Text(o.owner.as_ref().map_or_else(String::new, |p| art_word(p.art).into())),
+            Value::Integer(o.rev as i64),
         ],
     )
     .await?;

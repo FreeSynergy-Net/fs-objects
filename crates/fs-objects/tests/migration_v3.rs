@@ -44,7 +44,7 @@ async fn a_real_version_3_file_migrates_and_everything_new_works() {
         c.execute_batch(&old_rows_sql()).await.unwrap();
     }
     let s = TursoStore::open(&path).await.unwrap();
-    assert_eq!(s.schema_version(), 4);
+    assert_eq!(s.schema_version(), 5);
     assert_old_rows_survive(&s).await;
     let a = note("a", "text");
     s.put(a.clone(), ME).await.unwrap(); // the first logged put used to fail here

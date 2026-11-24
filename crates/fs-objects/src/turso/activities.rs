@@ -2,6 +2,7 @@
 //!
 //! Pattern: Repository (internal) — the only module that knows the `activities` table layout.
 
+use fs_types::BasicValue as _;
 use turso::{Connection, Value};
 
 use super::codec::decode_activity;
@@ -9,7 +10,7 @@ use super::rows::{int, opt_text, text};
 use super::schema::ACTIVITY_COLS;
 use super::sql::{collect, exec};
 use crate::history::Step;
-use crate::{Activity, ActivityId, Result};
+use crate::{Activity, ActivityId, Result, art_word};
 
 /// Load one activity by id.
 pub(super) async fn load_activity(c: &Connection, id: ActivityId) -> Result<Option<Activity>> {
@@ -26,7 +27,9 @@ pub(super) async fn load_activity(c: &Connection, id: ActivityId) -> Result<Opti
 pub(super) async fn insert_activity(c: &Connection, a: &Activity) -> Result<()> {
     exec(
         c,
-        &format!("INSERT INTO activities ({ACTIVITY_COLS}) VALUES (?,?,?,?,?,?,?,?)"),
+        &format!(
+            "INSERT INTO activities ({ACTIVITY_COLS}) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)"
+        ),
         vec![
             Value::Text(a.id.to_string()),
             Value::Text(a.kind.as_str().into()),
@@ -36,6 +39,23 @@ pub(super) async fn insert_activity(c: &Connection, a: &Activity) -> Result<()> 
             a.target.map_or(Value::Null, |t| Value::Text(t.to_string())),
             Value::Text(a.payload.to_string()),
             Value::Integer(i64::from(a.synced)),
+            Value::Text(
+                a.owner
+                    .as_ref()
+                    .map_or_else(String::new, |p| p.id.canonical()),
+            ),
+            Value::Text(
+                a.owner
+                    .as_ref()
+                    .map_or_else(String::new, |p| art_word(p.art).into()),
+            ),
+            Value::Text(a.origin.program.clone()),
+            Value::Text(a.origin.instance.clone()),
+            Value::Text(a.origin.device.clone()),
+            a.context.clone().map_or(Value::Null, Value::Text),
+            a.step.clone().map_or(Value::Null, Value::Text),
+            a.unit.map_or(Value::Null, |u| Value::Text(u.to_string())),
+            Value::Integer(a.revision as i64),
         ],
     )
     .await?;

@@ -48,7 +48,7 @@ for the same concrete type in one scope (calls become ambiguous); use `dyn Objec
 
 ## State
 
-Version 0.4.0 (schema version 4).
+Version 0.4.0 (schema version 4; the unreleased 0.0.11 line is schema version 5).
 
 | Area | State |
 |---|---|
@@ -92,7 +92,7 @@ Version 0.4.0 (schema version 4).
 
 ## Schema (Turso)
 
-* `schema_version(version)` - one row, currently 4 (1 = 0.1, which had no table; 2 = 0.2/0.3; 3 = unreleased, purge and unlogged marks; 4 = 0.4, store identity).
+* `schema_version(version)` - one row, currently 5 (1 = 0.1, which had no table; 2 = 0.2/0.3; 3 = unreleased, purge and unlogged marks; 4 = 0.4, store identity; 5 = owner, revision and origin columns, ADR 0104 E1, S3 stage 3).
 * `objects(id PK, iri, type, name, context, attributed_to, in_reply_to, published, updated, content_type, content JSON,
   original BLOB, original_type, addressing JSON, sensitive JSON, describes, start_time, end_time, name_sort)`
 * `activities(id PK UUIDv7, kind, object_id, actor, at, target, payload JSON, synced)` - append-only except for compaction
@@ -334,3 +334,13 @@ The table family `settings_*` (domain prefix `settings`, schema version 5 = five
 - Instance layer: idempotent writes (`Outcome::Same` = no log row, no `rev`), a lock sets the value it locks and needs a reason (also `unlock`), the log is append-only (triggers `BEFORE UPDATE/DELETE`, steps 2 and 3, as `object_original_immutable`). The lock applies to a key in the file where it is written; the person service checks the instance service's locks itself.
 - `Store::inspect`: `Store::open` writes (`bootstrap`), so the file is opened with `turso` 0.8.3's `Builder::read_only(true)` (`src/lib.rs:283-287`): no copy, no folder; the file, its length, its modification time and its folder stay the same (KA13). It is checked (`integrity_check`, `fs_domain`, `fs_step` fingerprints). A panic of the engine on a damaged file is caught in a task and reported as `Broken { cause: "open" }`. Empty files and files without the SQLite header are `Broken { cause: "header" }`; a foreign domain in the file is `Broken { cause: "registry" }`. Use it only BEFORE this process opens the store (or after the last handle is closed): the engine's POSIX `fcntl` locks belong to the process, so closing any descriptor of the file in this process drops the locks of the others (same error class as the migrator's A2); a file the process already holds open may lose its protection through the look.
 - Later columns: a new `Step::Sql("ALTER TABLE ... ADD COLUMN ...")` plus the changed `Table`; never `RENAME` (test KA16).
+
+## Schema 5: owner, revision, origin (stage 3, S3-2)
+
+Pattern: Unit of Work + Parameter Object + Result Object (`write_by`, `By`, `Outcome`).
+
+* **Name:** the SQL schema version 5 of this v4 file is NOT the `v5` table layer (feature `v5`, `src/v5/`). The two numbers are independent.
+* `objects` gets `owner_id`, `owner_art`, `rev`; `activities` gets `owner_id`, `owner_art`, `origin_program`, `origin_instance`, `origin_device`, `context`, `step`, `unit`, `revision`. The migration 4 -> 5 fills the owner of the opening call into existing rows (empty when opened without one; such rows read as `owner: None`, there is no hidden default).
+* `OpenOptions::with_owner(PersonRef)`: without it `write_by` refuses (`Invalid("store has no owner ...")`). The older `put`/`delete`/`undo`/`redo` keep working without an owner in this step; they stamp `rev` and the owner when there is one. S3-3 moves them onto `By`.
+* `write_by(by, writes)`: one transaction, one undo unit. The first activity is the head (carries `step`), the others carry `unit = head`. A `(context, step)` already in the log returns the old unit with `replayed = true`; the unique index `activities_step` backs this against a second writer. `expect` is compared with `objects.rev`; a mismatch is `Outcome::Conflict` (last change of the object + changed paths), nothing is written. A new object belongs to `By.owner`; another owner on an existing object is `Invalid`. `ObjectId` is `UUIDv7` by type, so a v4 id cannot reach the store.
+* `fs-types` is a required dependency now (`PersonRef`); the `v5` feature only adds the table layer.

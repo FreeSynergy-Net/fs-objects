@@ -5,7 +5,7 @@
 
 use async_trait::async_trait;
 
-use crate::{Activity, LogEntry, ObjectId, Result, StoredObject};
+use crate::{Activity, By, Error, LogEntry, ObjectId, Outcome, Result, StoredObject, Write};
 
 /// Write and read single objects.
 #[async_trait]
@@ -26,6 +26,19 @@ pub trait ObjectRepository: Send + Sync {
         actor: &str,
         extra: Vec<LogEntry>,
     ) -> Result<Vec<Activity>>;
+
+    /// Pattern: Unit of Work – write several objects as ONE undo unit in one transaction and record where
+    /// the change comes from (`by`). Rules: a `step` already in the log is not written twice (`replayed`); every
+    /// `expect` is compared with the object's `rev` (a mismatch is `Outcome::Conflict`, nothing is written); a
+    /// new object belongs to `by.owner`.
+    ///
+    /// The standard body refuses: a backend that does not record origin must not pretend it did.
+    async fn write_by(&self, by: &By, writes: Vec<Write>) -> Result<Outcome> {
+        let _ = (by, writes);
+        Err(Error::Invalid(
+            "this store records no origin (write_by)".into(),
+        ))
+    }
 
     /// Read one object by id.
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>>;

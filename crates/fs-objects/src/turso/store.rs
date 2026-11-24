@@ -14,7 +14,10 @@ use super::objects::{remove_object, write_object};
 use super::payload::payload_for;
 use super::rows::now;
 use super::schema::SCHEMA_VERSION;
-use crate::{Activity, ActivityId, ActivityKind, Error, ObjectId, Result, StoreId, StoredObject};
+use crate::{
+    Activity, ActivityId, ActivityKind, Error, ObjectId, Origin, PersonRef, Result, StoreId,
+    StoredObject,
+};
 
 /// Connection plus the last issued activity id (guarded by one mutex).
 pub(super) struct Inner {
@@ -35,6 +38,17 @@ pub struct TursoStore {
     pub(super) fail_in_purge: AtomicBool,
     pub(super) on_disk: bool,
     pub(super) identity: StoreId,
+    pub(super) owner: Option<PersonRef>,
+}
+
+/// Where a change comes from, written into its activity (empty on the legacy paths).
+#[derive(Default)]
+pub(super) struct Meta {
+    pub(super) owner: Option<PersonRef>,
+    pub(super) origin: Origin,
+    pub(super) context: Option<String>,
+    pub(super) step: Option<String>,
+    pub(super) unit: Option<ActivityId>,
 }
 
 /// One state change of an object, to be written with its activity.
@@ -72,6 +86,32 @@ impl TursoStore {
         actor: &str,
         ch: Change,
     ) -> Result<Activity> {
+        let meta = Meta {
+            owner: self.owner.clone(),
+            ..Meta::default()
+        };
+        self.apply_with(inner, actor, ch, &meta).await
+    }
+
+    /// [`TursoStore::apply`] with origin: stamps `rev` (one more than the image before) and the owner on the new
+    /// image, then writes the activity with the same values.
+    pub(super) async fn apply_with(
+        &self,
+        inner: &mut Inner,
+        actor: &str,
+        mut ch: Change,
+        meta: &Meta,
+    ) -> Result<Activity> {
+        let revision = ch.before.as_ref().map_or(0, |b| b.rev) + 1;
+        let owner = ch
+            .before
+            .as_ref()
+            .and_then(|b| b.owner.clone())
+            .or_else(|| meta.owner.clone());
+        if let Some(a) = ch.after.as_mut() {
+            a.rev = revision;
+            a.owner.clone_from(&owner);
+        }
         match &ch.after {
             Some(o) => write_object(&inner.conn, o).await?,
             None => remove_object(&inner.conn, ch.object).await?,
@@ -88,6 +128,12 @@ impl TursoStore {
             target: ch.target,
             payload,
             synced: false,
+            owner: meta.owner.clone(),
+            origin: meta.origin.clone(),
+            context: meta.context.clone(),
+            step: meta.step.clone(),
+            unit: meta.unit,
+            revision,
         };
         insert_activity(&inner.conn, &act).await?;
         if redacted {
@@ -122,6 +168,12 @@ impl TursoStore {
             target: None,
             payload,
             synced: false,
+            owner: self.owner.clone(),
+            origin: Origin::default(),
+            context: None,
+            step: None,
+            unit: None,
+            revision: 0,
         };
         insert_activity(&inner.conn, &act).await?;
         inner.last_activity = Some(id);

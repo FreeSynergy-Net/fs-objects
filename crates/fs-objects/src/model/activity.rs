@@ -7,7 +7,10 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{ActivityId, Error, ObjectId, Result, StoredObject, Timestamp};
+use fs_types::PersonRef;
+
+use super::person_text;
+use crate::{ActivityId, Error, ObjectId, Origin, Result, StoredObject, Timestamp};
 
 /// AS2 activity kinds recorded in the log (ADR 0020).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -123,6 +126,28 @@ pub struct Activity {
     pub payload: serde_json::Value,
     /// Handed to / acknowledged by the hub (see `Store::mark_synced`).
     pub synced: bool,
+    /// Whose store this belongs to (`None` only for rows an older schema wrote without one).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "person_text::option"
+    )]
+    pub owner: Option<PersonRef>,
+    /// Where the change comes from (empty for rows written without `write_by`).
+    #[serde(default)]
+    pub origin: Origin,
+    /// The run of `step`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<String>,
+    /// The step inside `context` (only on the head of a unit).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub step: Option<String>,
+    /// The head activity of the unit this one belongs to (`None` on a head).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unit: Option<ActivityId>,
+    /// `objects.rev` of the object after this activity (0 for log-only entries).
+    #[serde(default)]
+    pub revision: u64,
 }
 
 impl Activity {

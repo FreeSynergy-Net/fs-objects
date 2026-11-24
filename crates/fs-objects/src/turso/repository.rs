@@ -15,12 +15,13 @@ use super::store::Change;
 use super::tx::in_tx;
 use super::validate::validate;
 use crate::{
-    Activity, ActivityKind, Error, LogEntry, ObjectId, ObjectRepository, Result, StoredObject,
+    Activity, ActivityKind, By, Error, LogEntry, ObjectId, ObjectRepository, Outcome, Result,
+    StoredObject, Write,
 };
 
 /// Decide `Create`/`Update` for `object` given the stored `before`, and normalise the new image
 /// (store-owned timestamps, immutable original).
-fn plan_put(
+pub(super) fn plan_put(
     object: StoredObject,
     before: Option<&StoredObject>,
 ) -> Result<(ActivityKind, StoredObject)> {
@@ -77,32 +78,35 @@ impl ObjectRepository for TursoStore {
         let mut inner = self.inner.lock().await;
         let inner = &mut *inner;
         let conn = inner.conn.clone();
-        let res = in_tx(&conn, async {
-            let id = object.envelope.id;
-            refuse_unlogged(&inner.conn, id).await?;
-            let before = load_object(&inner.conn, id).await?;
-            let (kind, after) = plan_put(object, before.as_ref())?;
-            let first = self
-                .apply(
-                    inner,
-                    actor,
-                    Change {
-                        kind,
-                        object: id,
-                        target: None,
-                        before,
-                        after: Some(after),
-                    },
-                )
-                .await?;
-            let mut acts = vec![first];
-            self.check_extra_fault()?;
-            for e in extra {
-                let act = self.append_log(inner, actor, id, e.kind, e.payload).await?;
-                acts.push(act);
-            }
-            Ok(acts)
-        })
+        let res = in_tx(
+            &conn,
+            Box::pin(async {
+                let id = object.envelope.id;
+                refuse_unlogged(&inner.conn, id).await?;
+                let before = load_object(&inner.conn, id).await?;
+                let (kind, after) = plan_put(object, before.as_ref())?;
+                let first = self
+                    .apply(
+                        inner,
+                        actor,
+                        Change {
+                            kind,
+                            object: id,
+                            target: None,
+                            before,
+                            after: Some(after),
+                        },
+                    )
+                    .await?;
+                let mut acts = vec![first];
+                self.check_extra_fault()?;
+                for e in extra {
+                    let act = self.append_log(inner, actor, id, e.kind, e.payload).await?;
+                    acts.push(act);
+                }
+                Ok(acts)
+            }),
+        )
         .await;
         match res {
             Ok(acts) => {
@@ -117,6 +121,10 @@ impl ObjectRepository for TursoStore {
                 Err(e)
             }
         }
+    }
+
+    async fn write_by(&self, by: &By, writes: Vec<Write>) -> Result<Outcome> {
+        self.write_by_impl(by, writes).await
     }
 
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>> {

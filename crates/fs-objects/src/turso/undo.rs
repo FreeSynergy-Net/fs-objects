@@ -52,20 +52,23 @@ impl TursoStore {
         let mut inner = self.inner.lock().await;
         let inner = &mut *inner;
         let conn = inner.conn.clone();
-        let done = in_tx(&conn, async {
-            let mut done = Vec::new();
-            for _ in 0..n {
-                let stacks = history::compute(&load_steps(&inner.conn, actor).await?);
-                let target = if redo {
-                    stacks.redo.last().map(|(_, u)| *u)
-                } else {
-                    stacks.undo.last().copied()
-                };
-                let Some(t) = target else { break };
-                done.push(self.revert(inner, t, actor).await?);
-            }
-            Ok(done)
-        })
+        let done = in_tx(
+            &conn,
+            Box::pin(async {
+                let mut done = Vec::new();
+                for _ in 0..n {
+                    let stacks = history::compute(&load_steps(&inner.conn, actor).await?);
+                    let target = if redo {
+                        stacks.redo.last().map(|(_, u)| *u)
+                    } else {
+                        stacks.undo.last().copied()
+                    };
+                    let Some(t) = target else { break };
+                    done.push(self.revert(inner, t, actor).await?);
+                }
+                Ok(done)
+            }),
+        )
         .await?;
         self.publish(&done);
         Ok(done)

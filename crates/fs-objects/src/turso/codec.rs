@@ -7,7 +7,18 @@ use std::collections::BTreeMap;
 use turso::Value;
 
 use super::rows::{int, opt_int, opt_text, text, ts_from_micros};
-use crate::{Activity, Blob, Envelope, Result, StoredObject};
+use crate::{Activity, Blob, Envelope, Origin, PersonRef, Result, StoredObject, person_from};
+
+/// The owner of a row from its two columns (`None` for the empty marker of an older schema).
+fn owner_of(id: &Value, art: &Value) -> Result<Option<PersonRef>> {
+    let (id, art) = (text(id)?, text(art)?);
+    if id.is_empty() {
+        return Ok(None);
+    }
+    person_from(&id, &art)
+        .map(Some)
+        .ok_or_else(|| crate::Error::Backend(format!("bad owner {id}")))
+}
 
 /// Decode a row selected with `OBJECT_COLS` (without the index fields).
 pub(super) fn decode_object(row: &[Value]) -> Result<StoredObject> {
@@ -45,6 +56,8 @@ pub(super) fn decode_object(row: &[Value]) -> Result<StoredObject> {
         content: serde_json::from_str(&text(&row[10])?)?,
         original,
         index: BTreeMap::new(),
+        owner: owner_of(&row[19], &row[20])?,
+        rev: int(&row[21])? as u64,
     })
 }
 
@@ -59,5 +72,11 @@ pub(super) fn decode_activity(r: &[Value]) -> Result<Activity> {
         target: opt_text(&r[5])?.map(|s| s.parse()).transpose()?,
         payload: serde_json::from_str(&text(&r[6])?)?,
         synced: int(&r[7])? != 0,
+        owner: owner_of(&r[8], &r[9])?,
+        origin: Origin::new(text(&r[10])?, text(&r[11])?, text(&r[12])?),
+        context: opt_text(&r[13])?,
+        step: opt_text(&r[14])?,
+        unit: opt_text(&r[15])?.map(|s| s.parse()).transpose()?,
+        revision: int(&r[16])? as u64,
     })
 }

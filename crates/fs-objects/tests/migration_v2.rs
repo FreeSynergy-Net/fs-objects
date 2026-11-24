@@ -48,7 +48,7 @@ async fn a_version_2_file_migrates_and_old_and_new_writes_work() {
     let path = dir.path().join("v2.db");
     v2_file(&path).await;
     let s = TursoStore::open(&path).await.unwrap();
-    assert_eq!(s.schema_version(), 4);
+    assert_eq!(s.schema_version(), 5);
     assert_old_rows_survive(&s).await;
     let a = obj("Note", "a");
     s.put(a.clone(), ME).await.unwrap();

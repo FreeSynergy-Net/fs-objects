@@ -32,6 +32,8 @@ mod tx;
 mod undo;
 mod unlogged;
 mod validate;
+mod write_by;
+mod write_clash;
 
 pub use options::OpenOptions;
 pub use store::TursoStore;

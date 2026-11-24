@@ -73,7 +73,7 @@ impl TursoStore {
                 )));
             }
         } else {
-            migrate(&conn).await?;
+            migrate(&conn, opts.owner.as_ref()).await?;
         }
         let identity = read_identity(&conn).await?;
         let last_activity = last_activity_id(&conn).await?;
@@ -92,6 +92,7 @@ impl TursoStore {
             fail_in_purge: AtomicBool::new(false),
             on_disk: path != ":memory:",
             identity,
+            owner: opts.owner,
         })
     }
 }

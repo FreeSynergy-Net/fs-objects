@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 use base64::Engine as _;
 use serde::{Deserialize, Serialize};
 
+use fs_types::PersonRef;
+
 use crate::Envelope;
 
 /// A received original, kept byte-for-byte (ADR 0030).
@@ -51,6 +53,16 @@ pub struct StoredObject {
     /// Domain-extracted index fields (ADR 0020), supplied by the caller.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub index: IndexFields,
+    /// Whose object this is. `None` on input = the store sets it (`By.owner`); on read it is `Some` unless an older schema wrote it.
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "super::person_text::option"
+    )]
+    pub owner: Option<PersonRef>,
+    /// Revision: counts the writes of this object. Read only; the store sets it.
+    #[serde(default)]
+    pub rev: u64,
 }
 
 impl StoredObject {
@@ -66,6 +78,8 @@ impl StoredObject {
             content,
             original: None,
             index: BTreeMap::new(),
+            owner: None,
+            rev: 0,
         }
     }
     /// Builder: attach the original.
@@ -83,6 +97,8 @@ impl StoredObject {
     /// (update snapshots omit the immutable original).
     pub(crate) fn matches_snapshot(&self, snapshot: &StoredObject) -> bool {
         let mut a = self.clone();
+        a.rev = snapshot.rev;
+        a.owner.clone_from(&snapshot.owner);
         if snapshot.original.is_none() {
             a.original = None;
         }
