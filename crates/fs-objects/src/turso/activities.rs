@@ -124,3 +124,15 @@ pub(super) async fn mark_redacted(c: &Connection, id: ActivityId) -> Result<()> 
     .await?;
     Ok(())
 }
+
+/// The highest revision the log ever recorded for `object` (0 if none): a recreated object continues from here, so
+/// an old `expect` can never match a later incarnation (no ABA).
+pub(super) async fn last_revision(c: &Connection, object: crate::ObjectId) -> Result<u64> {
+    let rows = collect(
+        c,
+        "SELECT COALESCE(MAX(revision), 0) FROM activities WHERE object_id = ?",
+        vec![Value::Text(object.to_string())],
+    )
+    .await?;
+    rows.first().map_or(Ok(0), |r| Ok(int(&r[0])? as u64))
+}

@@ -123,6 +123,12 @@ impl TursoStore {
         for w in writes {
             let id = match w {
                 Write::Put { object, .. } => {
+                    if object.envelope.id.as_uuid().get_version_num() != 7 {
+                        return Err(Error::Invalid(format!(
+                            "{} is not a UUIDv7 (ADR 0027)",
+                            object.envelope.id.as_uuid()
+                        )));
+                    }
                     validate(object)?;
                     if !object.envelope.sensitive.is_empty()
                         && !self.encrypted

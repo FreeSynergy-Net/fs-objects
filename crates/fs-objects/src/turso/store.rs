@@ -9,7 +9,7 @@ use std::sync::atomic::AtomicBool;
 use tokio::sync::{Mutex, broadcast};
 use turso::Connection;
 
-use super::activities::{insert_activity, mark_redacted};
+use super::activities::{insert_activity, last_revision, mark_redacted};
 use super::objects::{remove_object, write_object};
 use super::payload::payload_for;
 use super::rows::now;
@@ -103,11 +103,15 @@ impl TursoStore {
         mut ch: Change,
         meta: &Meta,
     ) -> Result<Activity> {
-        let revision = ch.before.as_ref().map_or(0, |b| b.rev) + 1;
+        let revision = match &ch.before {
+            Some(b) => b.rev + 1,
+            None => last_revision(&inner.conn, ch.object).await? + 1,
+        };
         let owner = ch
             .before
             .as_ref()
             .and_then(|b| b.owner.clone())
+            .or_else(|| ch.after.as_ref().and_then(|a| a.owner.clone()))
             .or_else(|| meta.owner.clone());
         if let Some(a) = ch.after.as_mut() {
             a.rev = revision;

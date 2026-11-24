@@ -11,6 +11,7 @@ use super::guard::refuse_unlogged;
 use super::schema::ACTIVITY_COLS;
 use super::sql::collect;
 use super::tx::in_tx;
+use super::write_by::require_owner;
 use crate::{Activity, ActivityFilter, ActivityKind, ActivityLog, ChangeFilter, ObjectId, Result};
 
 #[async_trait]
@@ -24,6 +25,7 @@ impl ActivityLog for TursoStore {
     ) -> Result<Activity> {
         let mut inner = self.inner.lock().await;
         let inner = &mut *inner;
+        require_owner(inner)?;
         let conn = inner.conn.clone();
         refuse_unlogged(&conn, object).await?;
         let act = in_tx(&conn, self.append_log(inner, actor, object, kind, payload)).await?;

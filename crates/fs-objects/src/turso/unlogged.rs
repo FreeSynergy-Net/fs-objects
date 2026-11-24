@@ -3,17 +3,20 @@
 //! Pattern: Adapter — object rows are written as usual, in one transaction, with no activity row.
 
 use async_trait::async_trait;
+use fs_types::BasicValue as _;
 use turso::Value;
 
 use super::TursoStore;
 use super::codec::decode_object;
 use super::guard::mark_unlogged;
 use super::objects::{attach_index, load_object, remove_object, write_object};
+use super::owner::own_urn;
 use super::query_sql::{order_by, query_where};
 use super::schema::OBJECT_COLS;
 use super::sql::collect;
 use super::tx::in_tx;
 use super::validate::validate;
+use super::write_by::require_owner;
 use crate::{Error, ObjectId, Query, Result, StoredObject, UnloggedObjects};
 
 #[async_trait]
@@ -27,6 +30,7 @@ impl UnloggedObjects for TursoStore {
             return Err(Error::EncryptionRequired(object.envelope.id));
         }
         let inner = self.inner.lock().await;
+        require_owner(&inner)?;
         let conn = inner.conn.clone();
         in_tx(&conn, async {
             let mut after = object;
@@ -43,6 +47,21 @@ impl UnloggedObjects for TursoStore {
                 )));
             }
             let before = load_object(&inner.conn, after.envelope.id).await?;
+            let owner = before
+                .as_ref()
+                .and_then(|b| b.owner.clone())
+                .or_else(|| after.owner.clone())
+                .or_else(|| inner.owner.clone());
+            if owner
+                .as_ref()
+                .is_some_and(|o| o.id.canonical() == own_urn(&after))
+            {
+                return Err(Error::Invalid(format!(
+                    "{}: self-ownership only through birth",
+                    after.envelope.id
+                )));
+            }
+            after.owner = owner;
             if let Some(b) = before {
                 match (&b.original, &after.original) {
                     (Some(_), None) => after.original.clone_from(&b.original),

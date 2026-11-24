@@ -4,8 +4,9 @@ Version = tag.
 
 ## 0.0.11
 
-BREAKING (named, see DESIGN.md "Schema 5"): every write needs an owner. A store opened without `OpenOptions::with_owner` refuses `put`, `put_and_log`, `delete`, `undo`, `redo` and `write_by` at run time (`Invalid("store has no owner ...")`). The fix is one line per program: `OpenOptions::default().with_owner(person)`; in tests `fs_objects::testing::owner()` (feature `testing`). New fields on `Activity` and `StoredObject` break foreign struct literals.
+BREAKING (named, see DESIGN.md "Schema 5"): every write needs an owner. A store opened without `OpenOptions::with_owner` refuses `put`, `put_and_log`, `delete`, `undo`, `redo`, `revert_by`, `write_by`, `put_unlogged` and `log` at run time (`Invalid("store has no owner ...")`). The fix is one line per program: `OpenOptions::default().with_owner(person)`; in tests `fs_objects::testing::owner()` (feature `testing`). New fields on `Activity` and `StoredObject` break foreign struct literals.
 
+- Fixes after review: `write_by` refuses a non-UUIDv7 object id; `rev` continues after delete + undo/redo/put (no ABA with `expect`), a restored image keeps its owner; `put_unlogged` and `log` need an owner, `put_unlogged` refuses self-ownership outside `birth`.
 - Schema 5 (SQL version of the v4 file, not the `v5` table layer): owner, revision and origin on objects and activities; migration 4 -> 5 fills the columns; unique step index.
 - `write_by(by, writes)`: several writes as one undo unit with `By` (actor, owner, origin, run, step), idempotent step, compare-and-set (`expect` against `rev`), `Outcome` (`Done`, `Conflict`, `NotRevertible`, `Gone`).
 - `revert_by(change, by)`: take a whole unit back as one new unit. `changes_by(filter)`: the heads of the units, filtered.
