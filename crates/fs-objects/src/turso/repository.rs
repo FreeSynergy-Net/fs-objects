@@ -10,6 +10,7 @@ use super::TursoStore;
 use super::activities::last_activity_id;
 use super::guard::refuse_unlogged;
 use super::objects::load_object;
+use super::owner::check_caller_owner;
 use super::rows::now;
 use super::store::Change;
 use super::tx::in_tx;
@@ -86,6 +87,7 @@ impl ObjectRepository for TursoStore {
                 let id = object.envelope.id;
                 refuse_unlogged(&inner.conn, id).await?;
                 let before = load_object(&inner.conn, id).await?;
+                check_caller_owner(inner, &object, before.as_ref())?;
                 let (kind, after) = plan_put(object, before.as_ref())?;
                 let first = self
                     .apply(

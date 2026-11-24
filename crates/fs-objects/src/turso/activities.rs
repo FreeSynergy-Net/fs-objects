@@ -114,6 +114,20 @@ pub(super) async fn remember_high_water(c: &Connection) -> Result<()> {
     Ok(())
 }
 
+/// Before compaction removes log rows: remember the highest revision of every object that no longer exists (meta key
+/// `rev:<id>`), so [`last_revision`] still knows it when the id is written again (no ABA after compaction).
+pub(super) async fn remember_revisions(c: &Connection) -> Result<()> {
+    exec(
+        c,
+        "INSERT OR REPLACE INTO meta (key, value) \
+         SELECT 'rev:' || object_id, CAST(MAX(revision) AS TEXT) FROM activities \
+         WHERE revision > 0 AND object_id NOT IN (SELECT id FROM objects) GROUP BY object_id",
+        vec![],
+    )
+    .await?;
+    Ok(())
+}
+
 /// Mark an inserted activity as written without images (see `purge`).
 pub(super) async fn mark_redacted(c: &Connection, id: ActivityId) -> Result<()> {
     exec(
@@ -134,5 +148,20 @@ pub(super) async fn last_revision(c: &Connection, object: crate::ObjectId) -> Re
         vec![Value::Text(object.to_string())],
     )
     .await?;
-    rows.first().map_or(Ok(0), |r| Ok(int(&r[0])? as u64))
+    let logged = match rows.first() {
+        Some(r) => int(&r[0])? as u64,
+        None => 0,
+    };
+    let marks = collect(
+        c,
+        "SELECT value FROM meta WHERE key = ?",
+        vec![Value::Text(format!("rev:{object}"))],
+    )
+    .await?;
+    let marked = marks
+        .first()
+        .and_then(|r| text(&r[0]).ok())
+        .and_then(|t| t.parse::<u64>().ok())
+        .unwrap_or(0);
+    Ok(logged.max(marked))
 }

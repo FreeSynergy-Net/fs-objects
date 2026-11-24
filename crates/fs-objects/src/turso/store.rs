@@ -111,7 +111,12 @@ impl TursoStore {
             .before
             .as_ref()
             .and_then(|b| b.owner.clone())
-            .or_else(|| ch.after.as_ref().and_then(|a| a.owner.clone()))
+            .or_else(|| {
+                // Only the restore of an image (undo, redo, revert_by) brings its owner back; a put never does.
+                (ch.kind == ActivityKind::Undo)
+                    .then(|| ch.after.as_ref().and_then(|a| a.owner.clone()))
+                    .flatten()
+            })
             .or_else(|| meta.owner.clone());
         if let Some(a) = ch.after.as_mut() {
             a.rev = revision;

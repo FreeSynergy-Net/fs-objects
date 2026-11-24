@@ -140,3 +140,35 @@ impl TursoStore {
         self.write_unit(inner, by, writes, true).await
     }
 }
+
+/// The owner a caller-built object may carry when written by `put`, `put_and_log` or `put_unlogged`: none, or exactly
+/// the one that stamping would give it (the existing owner, else the store owner). Anything else, and self-ownership
+/// of a new object (only `birth` makes that), is `Invalid`; nothing is written. The stamp itself is set by
+/// `apply_with` / `put_unlogged`, never taken from the caller.
+pub(super) fn check_caller_owner(
+    inner: &Inner,
+    object: &StoredObject,
+    before: Option<&StoredObject>,
+) -> Result<()> {
+    let id = object.envelope.id;
+    let expected = before
+        .and_then(|b| b.owner.clone())
+        .or_else(|| inner.owner.clone());
+    let selfish = |o: &Option<PersonRef>| {
+        o.as_ref()
+            .is_some_and(|o| o.id.canonical() == own_urn(object))
+    };
+    if before.is_none() && (selfish(&expected) || selfish(&object.owner)) {
+        return Err(Error::Invalid(format!(
+            "{id}: self-ownership only through birth"
+        )));
+    }
+    if let Some(o) = &object.owner
+        && Some(o) != expected.as_ref()
+    {
+        return Err(Error::Invalid(format!(
+            "{id}: the owner is stamped by the store, another owner is a separate command"
+        )));
+    }
+    Ok(())
+}
