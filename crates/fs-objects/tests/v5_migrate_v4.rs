@@ -31,6 +31,7 @@ async fn v4_file(dir: &Path, objects: Vec<StoredObject>) -> PathBuf {
 
 fn opts() -> OpenOptions {
     OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         allow_sensitive_unencrypted: true,
         ..OpenOptions::default()
     }

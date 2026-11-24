@@ -21,7 +21,9 @@ async fn log_text(s: &TursoStore) -> String {
 
 #[tokio::test]
 async fn every_logged_call_is_refused_and_the_log_stays_empty() {
-    let s = TursoStore::open_in_memory().await.unwrap();
+    let s = TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap();
     let o = secret_box();
     let id = o.envelope.id;
     s.put_unlogged(o.clone()).await.unwrap();
@@ -49,7 +51,9 @@ async fn every_logged_call_is_refused_and_the_log_stays_empty() {
 
 #[tokio::test]
 async fn the_unlogged_flow_itself_keeps_working() {
-    let s = TursoStore::open_in_memory().await.unwrap();
+    let s = TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap();
     let mut o = secret_box();
     let id = o.envelope.id;
     s.put_unlogged(o.clone()).await.unwrap();
@@ -67,7 +71,9 @@ async fn the_unlogged_flow_itself_keeps_working() {
 
 #[tokio::test]
 async fn other_objects_are_not_touched_and_a_query_that_skips_the_box_works() {
-    let s = TursoStore::open_in_memory().await.unwrap();
+    let s = TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap();
     s.put_unlogged(secret_box()).await.unwrap();
     let note = obj("Note", "n");
     s.put(note.clone(), ME).await.unwrap();
@@ -87,17 +93,23 @@ async fn the_mark_survives_a_reopen() {
     let path = dir.path().join("s.db");
     let o = secret_box();
     {
-        let s = TursoStore::open(&path).await.unwrap();
+        let s = TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap();
         s.put_unlogged(o.clone()).await.unwrap();
     }
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     assert!(matches!(s.put(o.clone(), ME).await, Err(Error::Invalid(_))));
     assert!(s.read_unlogged(o.envelope.id).await.unwrap().is_some());
 }
 
 #[tokio::test]
 async fn a_refused_unlogged_write_leaves_no_mark() {
-    let s = TursoStore::open_in_memory().await.unwrap();
+    let s = TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap();
     let n = obj("Note", "n");
     s.put(n.clone(), ME).await.unwrap();
     // An id with logged history is refused by the unlogged path ...

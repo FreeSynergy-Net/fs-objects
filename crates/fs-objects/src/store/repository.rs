@@ -40,6 +40,17 @@ pub trait ObjectRepository: Send + Sync {
         ))
     }
 
+    /// Pattern: Unit of Work (the one exception) – the first write of a store: a single `Put` of a person whose owner is
+    /// the object itself (`by.owner.id` is `urn:uuid:` + the object's id, `art` is `Person`). Allowed once, while the store
+    /// has no owner; it sets the owner for good. A second one is `Invalid("store already owned")`. The standard body
+    /// refuses.
+    async fn birth(&self, by: &By, object: StoredObject) -> Result<Outcome> {
+        let _ = (by, object);
+        Err(Error::Invalid(
+            "this store records no origin (birth)".into(),
+        ))
+    }
+
     /// Read one object by id.
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>>;
 

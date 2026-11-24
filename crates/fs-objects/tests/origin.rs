@@ -185,7 +185,7 @@ async fn a_v4_id_cannot_be_made() {
 /// (6) Without an owner nothing is written through `write_by`, and a foreign owner on an object is refused.
 #[tokio::test]
 async fn writing_needs_an_owner() {
-    let s = mem().await;
+    let s = TursoStore::open_in_memory().await.unwrap();
     let r = s.write_by(&by(), vec![put(note("a", "1"), None)]).await;
     assert!(matches!(r, Err(Error::Invalid(m)) if m.contains("no owner")));
     assert_eq!(s.count(&Query::default()).await.unwrap(), 0);

@@ -107,11 +107,15 @@ async fn persistence_across_reopen_and_retention_persists() {
     let o = card("Ola");
     let id = o.envelope.id;
     {
-        let s = TursoStore::open(&path).await.unwrap();
+        let s = TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap();
         s.put(o.clone(), ME).await.unwrap();
         s.set_retention(Retention::steps(7)).await.unwrap();
     }
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     assert!(s.get(id).await.unwrap().is_some());
     assert_eq!(s.retention().await.unwrap(), Retention::steps(7));
     // undo survives restart (ADR 0042)

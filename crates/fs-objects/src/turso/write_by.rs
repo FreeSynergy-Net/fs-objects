@@ -3,6 +3,7 @@
 //! Pattern: Unit of Work — all writes of one call are planned first (nothing is written when one of them conflicts),
 //! then applied in ONE transaction; the first activity is the head of the unit, the others point to it.
 
+use fs_types::BasicValue as _;
 use turso::{Connection, Value};
 
 use super::TursoStore;
@@ -10,6 +11,7 @@ use super::activities::last_activity_id;
 use super::codec::decode_activity;
 use super::guard::refuse_unlogged;
 use super::objects::load_object;
+use super::owner::own_urn;
 use super::repository::plan_put;
 use super::schema::ACTIVITY_COLS;
 use super::sql::collect;
@@ -20,7 +22,11 @@ use super::write_clash::check_expect;
 use crate::{Activity, ActivityKind, By, Error, Outcome, Recorded, Result, Write};
 
 /// The head of the unit that holds `(context, step)`, with all its activities, if it is in the log.
-async fn unit_of_step(c: &Connection, context: &str, step: &str) -> Result<Option<Recorded>> {
+pub(super) async fn unit_of_step(
+    c: &Connection,
+    context: &str,
+    step: &str,
+) -> Result<Option<Recorded>> {
     let rows = collect(
         c,
         &format!("SELECT {ACTIVITY_COLS} FROM activities WHERE context = ? AND step = ? LIMIT 1"),
@@ -56,7 +62,7 @@ enum Planned {
 }
 
 /// Plan one write against the stored state (nothing is written).
-async fn plan_write(c: &Connection, by: &By, w: Write) -> Result<Planned> {
+async fn plan_write(c: &Connection, by: &By, w: Write, birth: bool) -> Result<Planned> {
     match w {
         Write::Put { object, expect } => {
             let id = object.envelope.id;
@@ -64,6 +70,11 @@ async fn plan_write(c: &Connection, by: &By, w: Write) -> Result<Planned> {
             let before = load_object(c, id).await?;
             if let Some(o) = check_expect(c, id, before.as_ref(), expect).await? {
                 return Ok(Planned::Stop(Box::new(o)));
+            }
+            if !birth && before.is_none() && by.owner.id.canonical() == own_urn(&object) {
+                return Err(Error::Invalid(format!(
+                    "{id}: self-ownership only at birth"
+                )));
             }
             let current_owner = before.as_ref().and_then(|b| b.owner.clone());
             let expected_owner = current_owner.unwrap_or_else(|| by.owner.clone());
@@ -101,12 +112,7 @@ async fn plan_write(c: &Connection, by: &By, w: Write) -> Result<Planned> {
 
 impl TursoStore {
     /// The rules that need no database: owner present, writes sensible, no id twice.
-    fn check_writes(&self, by: &By, writes: &[Write]) -> Result<()> {
-        if self.owner.is_none() {
-            return Err(Error::Invalid(
-                "store has no owner: open it with OpenOptions::with_owner".into(),
-            ));
-        }
+    pub(super) fn check_writes(&self, by: &By, writes: &[Write]) -> Result<()> {
         if writes.is_empty() {
             return Err(Error::Invalid("write_by without writes".into()));
         }
@@ -137,7 +143,13 @@ impl TursoStore {
 
     /// Plan every write, then apply them: the first activity is the head of the unit. Caller holds the lock and a
     /// transaction.
-    async fn write_unit(&self, inner: &mut Inner, by: &By, writes: Vec<Write>) -> Result<Outcome> {
+    pub(super) async fn write_unit(
+        &self,
+        inner: &mut Inner,
+        by: &By,
+        writes: Vec<Write>,
+        birth: bool,
+    ) -> Result<Outcome> {
         if let (Some(ctx), Some(step)) = (&by.context, &by.step)
             && let Some(rec) = unit_of_step(&inner.conn, ctx, step).await?
         {
@@ -145,7 +157,7 @@ impl TursoStore {
         }
         let mut plans = Vec::with_capacity(writes.len());
         for w in writes {
-            match plan_write(&inner.conn, by, w).await? {
+            match plan_write(&inner.conn, by, w, birth).await? {
                 Planned::Change(ch) => plans.push(ch),
                 Planned::Stop(o) => return Ok(*o),
             }
@@ -173,13 +185,13 @@ impl TursoStore {
         }))
     }
 
-    /// See [`ObjectRepository::write_by`](crate::ObjectRepository::write_by).
-    pub(super) async fn write_by_impl(&self, by: &By, writes: Vec<Write>) -> Result<Outcome> {
-        self.check_writes(by, &writes)?;
-        let mut inner = self.inner.lock().await;
-        let inner = &mut *inner;
-        let conn = inner.conn.clone();
-        let res = in_tx(&conn, Box::pin(self.write_unit(inner, by, writes))).await;
+    /// After the transaction of a unit: publish what was written, or re-read the last activity id of a rolled-back
+    /// attempt.
+    pub(super) async fn finish_write(
+        &self,
+        inner: &mut Inner,
+        res: Result<Outcome>,
+    ) -> Result<Outcome> {
         match res {
             Ok(Outcome::Done(rec)) => {
                 if !rec.replayed {
@@ -196,4 +208,25 @@ impl TursoStore {
             }
         }
     }
+
+    /// See [`ObjectRepository::write_by`](crate::ObjectRepository::write_by).
+    pub(super) async fn write_by_impl(&self, by: &By, writes: Vec<Write>) -> Result<Outcome> {
+        self.check_writes(by, &writes)?;
+        let mut inner = self.inner.lock().await;
+        let inner = &mut *inner;
+        require_owner(inner)?;
+        let conn = inner.conn.clone();
+        let res = in_tx(&conn, Box::pin(self.write_unit(inner, by, writes, false))).await;
+        self.finish_write(inner, res).await
+    }
+}
+
+/// Every write needs an owner: no empty one, no default one.
+pub(super) fn require_owner(inner: &Inner) -> Result<()> {
+    if inner.owner.is_none() {
+        return Err(Error::Invalid(
+            "store has no owner: open it with OpenOptions::with_owner".into(),
+        ));
+    }
+    Ok(())
 }

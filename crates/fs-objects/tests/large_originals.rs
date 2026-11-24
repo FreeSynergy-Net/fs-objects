@@ -18,6 +18,7 @@ fn message(name: &str) -> StoredObject {
 
 async fn encrypted(dir: &std::path::Path) -> TursoStore {
     let opts = OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         key_provider: Some(std::sync::Arc::new(StaticKeyProvider(key()))),
         ..OpenOptions::default()
     };

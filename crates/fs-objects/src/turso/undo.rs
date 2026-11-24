@@ -11,7 +11,10 @@ use super::activities::{load_activity, load_steps};
 use super::objects::load_object;
 use super::store::{Change, Inner};
 use super::tx::in_tx;
-use crate::{Activity, ActivityId, ActivityKind, Error, Result, UndoRedo, UndoState, history};
+use super::write_by::require_owner;
+use crate::{
+    Activity, ActivityId, ActivityKind, By, Error, Outcome, Result, UndoRedo, UndoState, history,
+};
 
 impl TursoStore {
     /// Revert activity `x_id` by writing its `before` image as a new `Undo` activity.
@@ -51,6 +54,7 @@ impl TursoStore {
     async fn step_back(&self, actor: &str, n: usize, redo: bool) -> Result<Vec<Activity>> {
         let mut inner = self.inner.lock().await;
         let inner = &mut *inner;
+        require_owner(inner)?;
         let conn = inner.conn.clone();
         let done = in_tx(
             &conn,
@@ -83,6 +87,10 @@ impl UndoRedo for TursoStore {
 
     async fn redo(&self, actor: &str, n: usize) -> Result<Vec<Activity>> {
         self.step_back(actor, n, true).await
+    }
+
+    async fn revert_by(&self, change: ActivityId, by: &By) -> Result<Outcome> {
+        self.revert_by_impl(change, by).await
     }
 
     async fn undo_state(&self, actor: &str) -> Result<UndoState> {

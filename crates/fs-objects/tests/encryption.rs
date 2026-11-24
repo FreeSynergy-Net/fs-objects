@@ -12,6 +12,7 @@ async fn encryption_at_rest() {
     let path = dir.path().join("enc.db");
     let secret = "very-secret-needle-0xBEEF";
     let opts = || OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         key_provider: Some(std::sync::Arc::new(StaticKeyProvider(key()))),
         ..Default::default()
     };
@@ -31,6 +32,7 @@ async fn encryption_at_rest() {
         let s = TursoStore::open_with(
             plain.join("p.db"),
             OpenOptions {
+                owner: Some(fs_objects::testing::owner()),
                 allow_sensitive_unencrypted: true,
                 ..Default::default()
             },
@@ -62,6 +64,7 @@ async fn encrypted_store_rejects_wrong_key() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("enc2.db");
     let mk = |k: Vec<u8>| OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         key_provider: Some(std::sync::Arc::new(StaticKeyProvider(EncryptionKey {
             cipher: Cipher::Aes256Gcm,
             key: k,
@@ -89,7 +92,12 @@ async fn encrypted_store_rejects_wrong_key() {
 #[tokio::test]
 async fn sensitive_requires_encryption_by_default() {
     let dir = tempfile::tempdir().unwrap();
-    let s = TursoStore::open(dir.path().join("plain.db")).await.unwrap();
+    let s = TursoStore::open_with(
+        dir.path().join("plain.db"),
+        OpenOptions::default().with_owner(fs_objects::testing::owner()),
+    )
+    .await
+    .unwrap();
     let mut o = card("Rex");
     o.envelope.sensitive = vec!["pd:Health".into()];
     assert!(matches!(
@@ -100,6 +108,7 @@ async fn sensitive_requires_encryption_by_default() {
     let s2 = TursoStore::open_with(
         dir.path().join("plain2.db"),
         OpenOptions {
+            owner: Some(fs_objects::testing::owner()),
             allow_sensitive_unencrypted: true,
             ..Default::default()
         },

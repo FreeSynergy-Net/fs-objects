@@ -8,7 +8,9 @@ use fs_objects::traits::UnloggedObjects;
 use fs_objects::*;
 
 async fn store() -> TursoStore {
-    TursoStore::open_in_memory().await.unwrap()
+    TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap()
 }
 
 #[tokio::test]
@@ -75,7 +77,12 @@ async fn deleting_what_is_not_there_is_fine() {
 #[tokio::test]
 async fn sensitive_is_refused_without_encryption() {
     let dir = tempfile::tempdir().unwrap();
-    let s = TursoStore::open(dir.path().join("plain.db")).await.unwrap();
+    let s = TursoStore::open_with(
+        dir.path().join("plain.db"),
+        OpenOptions::default().with_owner(fs_objects::testing::owner()),
+    )
+    .await
+    .unwrap();
     let mut o = obj("Box", "one");
     o.envelope.sensitive = vec!["dpv:HealthData".to_string()];
     assert!(matches!(

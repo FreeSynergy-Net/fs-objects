@@ -56,7 +56,9 @@ async fn migrates_a_0_1_database() {
         .unwrap();
     }
     {
-        let s = TursoStore::open(&path).await.unwrap();
+        let s = TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap();
         assert_eq!(s.schema_version(), 5);
         let o = s.get(id).await.unwrap().unwrap();
         assert_eq!(o.envelope.name, "Émile Old");
@@ -80,7 +82,9 @@ async fn migrates_a_0_1_database() {
         s.put(o, ME).await.unwrap();
     }
     // reopening is a no-op (idempotent) and keeps data
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     let o = s.get(id).await.unwrap().unwrap();
     assert_eq!(o.envelope.start_time, Some(at(9)));
     assert_eq!(
@@ -97,7 +101,9 @@ async fn fresh_database_has_version_and_refuses_newer() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("new.db");
     {
-        let s = TursoStore::open(&path).await.unwrap();
+        let s = TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap();
         s.put(obj("Note", "x"), ME).await.unwrap();
     }
     {
@@ -111,7 +117,7 @@ async fn fresh_database_has_version_and_refuses_newer() {
             .unwrap();
     }
     assert!(matches!(
-        TursoStore::open(&path).await,
+        TursoStore::open_with(&path, fs_objects::testing::options()).await,
         Err(Error::Backend(_))
     ));
 }

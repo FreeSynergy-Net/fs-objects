@@ -11,7 +11,7 @@ use super::guard::refuse_unlogged;
 use super::schema::ACTIVITY_COLS;
 use super::sql::collect;
 use super::tx::in_tx;
-use crate::{Activity, ActivityFilter, ActivityKind, ActivityLog, ObjectId, Result};
+use crate::{Activity, ActivityFilter, ActivityKind, ActivityLog, ChangeFilter, ObjectId, Result};
 
 #[async_trait]
 impl ActivityLog for TursoStore {
@@ -59,6 +59,52 @@ impl ActivityLog for TursoStore {
         let rows = collect(
             &inner.conn,
             &format!("SELECT {ACTIVITY_COLS} FROM activities{w} ORDER BY id LIMIT ?"),
+            p,
+        )
+        .await?;
+        rows.iter().map(|r| decode_activity(r)).collect()
+    }
+
+    async fn changes_by(&self, f: &ChangeFilter) -> Result<Vec<Activity>> {
+        if f.objects.as_ref().is_some_and(Vec::is_empty) {
+            return Ok(vec![]);
+        }
+        let inner = self.inner.lock().await;
+        let mut clauses: Vec<String> = vec![
+            "kind IN ('Create','Update','Delete','Undo')".into(),
+            "unit IS NULL".into(),
+        ];
+        let mut p: Vec<Value> = Vec::new();
+        if let Some(a) = f.after {
+            clauses.push("id > ?".into());
+            p.push(Value::Text(a.to_string()));
+        }
+        if let Some(x) = &f.program {
+            clauses.push("origin_program = ?".into());
+            p.push(Value::Text(x.clone()));
+        }
+        if let Some(x) = &f.run {
+            clauses.push("context = ?".into());
+            p.push(Value::Text(x.clone()));
+        }
+        if let Some(objs) = &f.objects {
+            // the head itself, or any member of its unit, is about one of the objects
+            let marks = vec!["?"; objs.len()].join(",");
+            clauses.push(format!(
+                "(object_id IN ({marks}) OR id IN (SELECT unit FROM activities \
+                 WHERE unit IS NOT NULL AND object_id IN ({marks})))"
+            ));
+            for _ in 0..2 {
+                p.extend(objs.iter().map(|o| Value::Text(o.to_string())));
+            }
+        }
+        p.push(Value::Integer(f.limit.map_or(i64::MAX, |l| l as i64)));
+        let rows = collect(
+            &inner.conn,
+            &format!(
+                "SELECT {ACTIVITY_COLS} FROM activities WHERE {} ORDER BY id LIMIT ?",
+                clauses.join(" AND ")
+            ),
             p,
         )
         .await?;

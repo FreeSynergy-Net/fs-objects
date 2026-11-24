@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .next()
         .map_or_else(|| tmp.path().join("contacts.db"), PathBuf::from);
 
-    let store = TursoStore::open(&db).await?;
+    let store = TursoStore::open_with(&db, fs_objects::testing::options()).await?;
     let c = import(&store, &contacts, card_to_object).await?;
     let e = import(&store, &events, event_to_object).await?;
     println!(

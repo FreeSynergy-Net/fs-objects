@@ -7,6 +7,8 @@ license.workspace = true
 rust-version.workspace = true
 
 [features]
+# Helpers for the tests of fs-objects and of the programs that embed it (`testing::owner()`).
+testing = []
 # The v5 typed-table layer (docs/v5-entwurf.md); v4 users do not pull in its OS-randomness dependency.
 v5 = ["dep:getrandom"]
 
@@ -33,6 +35,8 @@ sha2 = "0.11.0"
 rustix = { version = "1.0", features = ["fs"] }
 
 [dev-dependencies]
+# the integration tests use `fs_objects::testing`
+fs-objects = { path = ".", features = ["testing"] }
 tokio = { version = "1", features = ["full"] }
 tempfile = "3"
 proptest = "1"

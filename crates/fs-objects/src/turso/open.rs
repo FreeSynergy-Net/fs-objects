@@ -14,6 +14,7 @@ use super::encryption;
 use super::identity::read_identity;
 use super::migration::{detect_version, migrate};
 use super::options::OpenOptions;
+use super::owner::settle_owner;
 use super::schema::SCHEMA_VERSION;
 use super::store::Inner;
 use crate::{Error, Result};
@@ -75,6 +76,7 @@ impl TursoStore {
         } else {
             migrate(&conn, opts.owner.as_ref()).await?;
         }
+        let owner = settle_owner(&conn, opts.owner.as_ref(), read_only).await?;
         let identity = read_identity(&conn).await?;
         let last_activity = last_activity_id(&conn).await?;
         let (tx, _) = broadcast::channel(opts.subscribe_capacity.max(1));
@@ -83,6 +85,7 @@ impl TursoStore {
             inner: Mutex::new(Inner {
                 conn,
                 last_activity,
+                owner,
             }),
             tx,
             encrypted,
@@ -92,7 +95,6 @@ impl TursoStore {
             fail_in_purge: AtomicBool::new(false),
             on_disk: path != ":memory:",
             identity,
-            owner: opts.owner,
         })
     }
 }

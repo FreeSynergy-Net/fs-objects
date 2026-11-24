@@ -11,7 +11,9 @@ fn object(kind: &str, name: &str) -> StoredObject {
 
 #[tokio::test]
 async fn finds_only_unlogged_objects_of_the_given_types() {
-    let s = TursoStore::open_in_memory().await.unwrap();
+    let s = TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap();
     let (a, b) = (object("Mine", "a"), object("Mine", "b"));
     s.put_unlogged(a.clone()).await.unwrap();
     s.put_unlogged(b).await.unwrap();
@@ -30,7 +32,9 @@ async fn finds_only_unlogged_objects_of_the_given_types() {
 
 #[tokio::test]
 async fn refuses_an_empty_type_list_and_honours_the_query() {
-    let s = TursoStore::open_in_memory().await.unwrap();
+    let s = TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap();
     s.put_unlogged(object("Mine", "a")).await.unwrap();
     s.put_unlogged(object("Mine", "b")).await.unwrap();
     assert!(s.query_unlogged(&Query::new(), &[]).await.is_err());

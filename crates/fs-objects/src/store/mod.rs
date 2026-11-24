@@ -21,7 +21,7 @@ pub use cond::{Cond, Op, TimeField};
 pub use facade::Store;
 pub use feed::ChangeFeed;
 pub use info::StoreInfo;
-pub use log::{ActivityFilter, ActivityLog, LogEntry};
+pub use log::{ActivityFilter, ActivityLog, ChangeFilter, LogEntry};
 pub use originals::{LargeOriginals, OriginalRef};
 pub use purge::PurgeReport;
 pub use query::{Order, Query};

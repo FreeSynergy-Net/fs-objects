@@ -23,6 +23,8 @@ use crate::{
 pub(super) struct Inner {
     pub(super) conn: Connection,
     pub(super) last_activity: Option<ActivityId>,
+    /// The owner of the store (set at open, or by `birth`); behind the same lock as the writes.
+    pub(super) owner: Option<PersonRef>,
 }
 
 /// Embedded Turso backend.
@@ -38,7 +40,6 @@ pub struct TursoStore {
     pub(super) fail_in_purge: AtomicBool,
     pub(super) on_disk: bool,
     pub(super) identity: StoreId,
-    pub(super) owner: Option<PersonRef>,
 }
 
 /// Where a change comes from, written into its activity (empty on the legacy paths).
@@ -87,7 +88,7 @@ impl TursoStore {
         ch: Change,
     ) -> Result<Activity> {
         let meta = Meta {
-            owner: self.owner.clone(),
+            owner: inner.owner.clone(),
             ..Meta::default()
         };
         self.apply_with(inner, actor, ch, &meta).await
@@ -168,7 +169,7 @@ impl TursoStore {
             target: None,
             payload,
             synced: false,
-            owner: self.owner.clone(),
+            owner: inner.owner.clone(),
             origin: Origin::default(),
             context: None,
             step: None,

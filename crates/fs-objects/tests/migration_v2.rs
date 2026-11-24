@@ -47,7 +47,9 @@ async fn a_version_2_file_migrates_and_old_and_new_writes_work() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("v2.db");
     v2_file(&path).await;
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     assert_eq!(s.schema_version(), 5);
     assert_old_rows_survive(&s).await;
     let a = obj("Note", "a");
@@ -55,7 +57,9 @@ async fn a_version_2_file_migrates_and_old_and_new_writes_work() {
     let b = obj("Box", "b");
     s.put_unlogged(b.clone()).await.unwrap();
     drop(s);
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     assert_eq!(
         s.get(a.envelope.id).await.unwrap().unwrap().content,
         a.content

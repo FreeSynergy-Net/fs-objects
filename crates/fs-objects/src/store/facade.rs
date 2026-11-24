@@ -10,7 +10,7 @@ use async_trait::async_trait;
 use tokio::sync::broadcast;
 
 use crate::{
-    Activity, ActivityFilter, ActivityId, ActivityKind, ActivityLog, By, ChangeFeed,
+    Activity, ActivityFilter, ActivityId, ActivityKind, ActivityLog, By, ChangeFeed, ChangeFilter,
     CompactionReport, HistoryRetention, LogEntry, LogStats, ObjectId, ObjectQuery,
     ObjectRepository, Outcome, PurgeReport, Query, Result, Retention, StoreId, StoreInfo,
     StoredObject, Timestamp, UndoRedo, UndoState, Write,
@@ -33,6 +33,13 @@ pub trait Store: Send + Sync {
     ) -> Result<Vec<Activity>>;
     /// See [`ObjectRepository::write_by`].
     async fn write_by(&self, by: &By, writes: Vec<Write>) -> Result<Outcome>;
+    /// See [`ObjectRepository::birth`]. Default: refuses (records no origin).
+    async fn birth(&self, by: &By, object: StoredObject) -> Result<Outcome> {
+        let _ = (by, object);
+        Err(crate::Error::Invalid(
+            "this store records no origin (birth)".into(),
+        ))
+    }
     /// See [`ObjectRepository::get`].
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>>;
     /// See [`ObjectRepository::delete`].
@@ -59,6 +66,20 @@ pub trait Store: Send + Sync {
     async fn redo(&self, actor: &str, n: usize) -> Result<Vec<Activity>>;
     /// See [`UndoRedo::undo_state`].
     async fn undo_state(&self, actor: &str) -> Result<UndoState>;
+    /// See [`UndoRedo::revert_by`]. Default: refuses (records no origin).
+    async fn revert_by(&self, change: ActivityId, by: &By) -> Result<Outcome> {
+        let _ = (change, by);
+        Err(crate::Error::Invalid(
+            "this store records no origin (revert_by)".into(),
+        ))
+    }
+    /// See [`ActivityLog::changes_by`]. Default: refuses (records no origin).
+    async fn changes_by(&self, f: &ChangeFilter) -> Result<Vec<Activity>> {
+        let _ = f;
+        Err(crate::Error::Invalid(
+            "this store records no origin (changes_by)".into(),
+        ))
+    }
     /// See [`HistoryRetention::retention`].
     async fn retention(&self) -> Result<Retention>;
     /// See [`HistoryRetention::set_retention`].
@@ -117,6 +138,9 @@ where
     async fn write_by(&self, by: &By, writes: Vec<Write>) -> Result<Outcome> {
         ObjectRepository::write_by(self, by, writes).await
     }
+    async fn birth(&self, by: &By, object: StoredObject) -> Result<Outcome> {
+        ObjectRepository::birth(self, by, object).await
+    }
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>> {
         ObjectRepository::get(self, id).await
     }
@@ -152,6 +176,12 @@ where
     }
     async fn undo_state(&self, actor: &str) -> Result<UndoState> {
         UndoRedo::undo_state(self, actor).await
+    }
+    async fn revert_by(&self, change: ActivityId, by: &By) -> Result<Outcome> {
+        UndoRedo::revert_by(self, change, by).await
+    }
+    async fn changes_by(&self, f: &ChangeFilter) -> Result<Vec<Activity>> {
+        ActivityLog::changes_by(self, f).await
     }
     async fn retention(&self) -> Result<Retention> {
         HistoryRetention::retention(self).await

@@ -29,6 +29,8 @@ mod error;
 pub mod history;
 mod model;
 mod store;
+#[cfg(feature = "testing")]
+pub mod testing;
 mod text;
 pub mod traits;
 mod turso;
@@ -45,8 +47,8 @@ pub use model::{
 pub use model::{By, FieldClash, Origin, Outcome, Recorded, Write};
 pub(crate) use model::{art_word, person_from};
 pub use store::{
-    ActivityFilter, CompactionReport, Cond, LargeOriginals, LogEntry, LogStats, Op, Order,
-    OriginalRef, PurgeReport, Query, Retention, Store, StoreInfo, TimeField, UndoState,
+    ActivityFilter, ChangeFilter, CompactionReport, Cond, LargeOriginals, LogEntry, LogStats, Op,
+    Order, OriginalRef, PurgeReport, Query, Retention, Store, StoreInfo, TimeField, UndoState,
 };
 pub(crate) use store::{
     ActivityLog, ChangeFeed, HistoryRetention, ObjectQuery, ObjectRepository, UndoRedo,

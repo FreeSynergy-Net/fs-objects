@@ -14,6 +14,7 @@ use super::rows::now;
 use super::store::Change;
 use super::tx::in_tx;
 use super::validate::validate;
+use super::write_by::require_owner;
 use crate::{
     Activity, ActivityKind, By, Error, LogEntry, ObjectId, ObjectRepository, Outcome, Result,
     StoredObject, Write,
@@ -77,6 +78,7 @@ impl ObjectRepository for TursoStore {
         }
         let mut inner = self.inner.lock().await;
         let inner = &mut *inner;
+        require_owner(inner)?;
         let conn = inner.conn.clone();
         let res = in_tx(
             &conn,
@@ -127,6 +129,10 @@ impl ObjectRepository for TursoStore {
         self.write_by_impl(by, writes).await
     }
 
+    async fn birth(&self, by: &By, object: StoredObject) -> Result<Outcome> {
+        self.birth_impl(by, object).await
+    }
+
     async fn get(&self, id: ObjectId) -> Result<Option<StoredObject>> {
         let inner = self.inner.lock().await;
         refuse_unlogged(&inner.conn, id).await?;
@@ -136,6 +142,7 @@ impl ObjectRepository for TursoStore {
     async fn delete(&self, id: ObjectId, actor: &str) -> Result<Activity> {
         let mut inner = self.inner.lock().await;
         let inner = &mut *inner;
+        require_owner(inner)?;
         let conn = inner.conn.clone();
         let act = in_tx(&conn, async {
             refuse_unlogged(&inner.conn, id).await?;

@@ -4,7 +4,7 @@
 
 use async_trait::async_trait;
 
-use crate::{Activity, ActivityId, ActivityKind, ObjectId, Result};
+use crate::{Activity, ActivityId, ActivityKind, Error, ObjectId, Result};
 
 /// An additional log-only activity for [`ObjectRepository::put_and_log`](crate::traits::ObjectRepository::put_and_log).
 #[derive(Clone, Debug, PartialEq)]
@@ -37,6 +37,22 @@ pub struct ActivityFilter {
     pub limit: Option<usize>,
 }
 
+/// Pattern: Specification (filter object) – which units of change `changes_by` returns: only heads, ascending by id.
+#[derive(Clone, Debug, Default)]
+#[non_exhaustive]
+pub struct ChangeFilter {
+    /// Only units written by this program (`Origin::program`).
+    pub program: Option<String>,
+    /// Only units of this run (`By::context`).
+    pub run: Option<String>,
+    /// Only units that touch one of these objects.
+    pub objects: Option<Vec<ObjectId>>,
+    /// Only units with a head id strictly greater than this (cursor).
+    pub after: Option<ActivityId>,
+    /// Maximum number of units.
+    pub limit: Option<usize>,
+}
+
 /// Append to and read the append-only activity log.
 #[async_trait]
 pub trait ActivityLog: Send + Sync {
@@ -52,4 +68,14 @@ pub trait ActivityLog: Send + Sync {
 
     /// Read log entries matching the filter, ascending by id.
     async fn activities(&self, filter: &ActivityFilter) -> Result<Vec<Activity>>;
+
+    /// The head activities of the units of change that match `f`, ascending by id (a unit is one `write_by` or one
+    /// `revert_by`; the other activities of a unit carry `unit = head`). The standard body refuses: a backend that
+    /// does not record origin must not pretend it did.
+    async fn changes_by(&self, f: &ChangeFilter) -> Result<Vec<Activity>> {
+        let _ = f;
+        Err(Error::Invalid(
+            "this store records no origin (changes_by)".into(),
+        ))
+    }
 }

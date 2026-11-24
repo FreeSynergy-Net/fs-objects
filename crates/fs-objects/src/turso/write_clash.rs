@@ -12,7 +12,7 @@ use crate::{Activity, FieldClash, ObjectId, Outcome, Result, StoredObject};
 const STATE_KINDS: &str = "kind IN ('Create','Update','Delete','Undo')";
 
 /// The last state-changing activity of an object.
-async fn last_change(c: &Connection, id: ObjectId) -> Result<Option<Activity>> {
+pub(super) async fn last_change(c: &Connection, id: ObjectId) -> Result<Option<Activity>> {
     let rows = collect(
         c,
         &format!(
@@ -118,4 +118,17 @@ pub(super) async fn check_expect(
         by: Box::new(by),
         fields,
     }))
+}
+
+/// The paths whose value differs between two images (empty if either is missing).
+pub(super) fn clash_between(
+    a: Option<&StoredObject>,
+    b: Option<&StoredObject>,
+) -> Result<Vec<FieldClash>> {
+    let (Some(a), Some(b)) = (a, b) else {
+        return Ok(vec![]);
+    };
+    let mut out = Vec::new();
+    diff_paths(&comparable(a)?, &comparable(b)?, "", &mut out);
+    Ok(out)
 }

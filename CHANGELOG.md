@@ -2,6 +2,18 @@
 
 Version = tag.
 
+## 0.0.11
+
+BREAKING (named, see DESIGN.md "Schema 5"): every write needs an owner. A store opened without `OpenOptions::with_owner` refuses `put`, `put_and_log`, `delete`, `undo`, `redo` and `write_by` at run time (`Invalid("store has no owner ...")`). The fix is one line per program: `OpenOptions::default().with_owner(person)`; in tests `fs_objects::testing::owner()` (feature `testing`). New fields on `Activity` and `StoredObject` break foreign struct literals.
+
+- Schema 5 (SQL version of the v4 file, not the `v5` table layer): owner, revision and origin on objects and activities; migration 4 -> 5 fills the columns; unique step index.
+- `write_by(by, writes)`: several writes as one undo unit with `By` (actor, owner, origin, run, step), idempotent step, compare-and-set (`expect` against `rev`), `Outcome` (`Done`, `Conflict`, `NotRevertible`, `Gone`).
+- `revert_by(change, by)`: take a whole unit back as one new unit. `changes_by(filter)`: the heads of the units, filtered.
+- The owner of a store lives in `meta.store_owner`: `with_owner` is kept for good, another owner at open is `Invalid("store owner mismatch")`. `birth(by, object)` is the one write whose owner is the written object itself (a person), once per store.
+- New trait methods have a standard body that refuses with `Invalid`, so a foreign backend (fs-calendars `StoreAdapter`) keeps compiling and never pretends to record an origin.
+- `fs-types` is a required dependency (`PersonRef`). Feature `testing`: `testing::owner()`, `testing::options()`.
+- Auf Deutsch: Jedes Schreiben braucht jetzt einen Besitzer (benannter Bruch): ohne `OpenOptions::with_owner` lehnen `put`, `put_and_log`, `delete`, `undo`, `redo`, `write_by` zur Laufzeit ab. Neu: Schema 5 (Besitzer, Revision, Herkunft), `write_by` als eine Rueckgaengig-Einheit mit Schritt-Wiederholung und Compare-and-set, `revert_by`, `changes_by`, der dauerhafte Speicher-Besitzer (`meta.store_owner`, Abweichung = `store owner mismatch`) und `birth` (die eine Schreibung, deren Besitzer das geschriebene Objekt selbst ist). Neue Trait-Methoden haben Standard-Rumpf (lehnt ab). Feature `testing` mit `testing::owner()`.
+
 ## 0.0.10
 
 - Only pins and the address change: the `fs-types` git URL is now `https://github.com/FreeSynergy-Net/fs-types` (tag `v0.0.6` unchanged), the workflow pins to `fs-release` are raised to `9eed5c95eb7311f2b68266a012ec778f51e3ac38` (v0.0.18). The lock holds exactly one `fs-types` source (the Net URL). No code change.

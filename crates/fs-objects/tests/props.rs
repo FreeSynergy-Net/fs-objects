@@ -58,7 +58,7 @@ proptest! {
     #[test]
     fn undo_redo_matches_model(ops in proptest::collection::vec(op(), 1..25)) {
         rt().block_on(async {
-            let s = TursoStore::open_in_memory().await.unwrap();
+            let s = TursoStore::open_with(":memory:", fs_objects::testing::options()).await.unwrap();
             let ids: Vec<ObjectId> = (0..3).map(|_| ObjectId::new()).collect();
             let mut state: Vec<Slot> = vec![None; 3];
             // (slot, before, after)
@@ -129,7 +129,7 @@ proptest! {
         keep in 0usize..8,
     ) {
         rt().block_on(async {
-            let s = TursoStore::open_in_memory().await.unwrap();
+            let s = TursoStore::open_with(":memory:", fs_objects::testing::options()).await.unwrap();
             let ids: Vec<ObjectId> = (0..3).map(|_| ObjectId::new()).collect();
             for op in ops {
                 match op {

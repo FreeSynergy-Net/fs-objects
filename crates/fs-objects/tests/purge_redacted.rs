@@ -68,7 +68,9 @@ async fn normal_entries_are_not_marked() {
 async fn a_busy_file_is_reported_not_an_error_and_clean_files_finishes_later() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("p.db");
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     let o = note("x", "NEEDLE-SECRET-TEXT");
     s.put(o.clone(), ME).await.unwrap();
     s.delete(o.envelope.id, ME).await.unwrap(); // the object row would keep the text

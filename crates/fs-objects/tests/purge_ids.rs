@@ -54,7 +54,9 @@ async fn ids_stay_above_what_was_handed_out_after_a_reopen() {
     let path = dir.path().join("h.db");
     let x = note("x", "a");
     let newest = {
-        let s = TursoStore::open(&path).await.unwrap();
+        let s = TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap();
         s.put(note("y", "b"), ME).await.unwrap();
         let n = s.put(x.clone(), ME).await.unwrap();
         s.purge_object(x.envelope.id).await.unwrap();
@@ -67,7 +69,9 @@ async fn ids_stay_above_what_was_handed_out_after_a_reopen() {
     let future = uuid::Uuid::from_u128(future).to_string();
     let sql = format!("UPDATE meta SET value = '{future}' WHERE key = 'activity_high'");
     raw_sql(&path, &sql).await;
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     let next = s.put(note("z", "c"), ME).await.unwrap();
     assert!(next.id.to_string() > future, "{} <= {future}", next.id);
 }

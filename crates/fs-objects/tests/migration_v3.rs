@@ -43,7 +43,9 @@ async fn a_real_version_3_file_migrates_and_everything_new_works() {
         c.execute_batch(V3_SCHEMA).await.unwrap();
         c.execute_batch(&old_rows_sql()).await.unwrap();
     }
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     assert_eq!(s.schema_version(), 5);
     assert_old_rows_survive(&s).await;
     let a = note("a", "text");
@@ -55,7 +57,9 @@ async fn a_real_version_3_file_migrates_and_everything_new_works() {
     s.put(a.clone(), ME).await.unwrap();
     let id = StoreInfo::identity(&s);
     drop(s);
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     assert_eq!(StoreInfo::identity(&s), id);
     assert!(s.get(a.envelope.id).await.unwrap().is_some());
 }

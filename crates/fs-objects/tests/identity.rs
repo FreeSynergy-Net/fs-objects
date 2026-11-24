@@ -19,7 +19,9 @@ async fn a_new_store_has_its_own_identity_and_it_is_not_a_time_ordered_id() {
 async fn the_identity_survives_a_restart_and_a_file_copy() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("a.db");
-    let s = TursoStore::open(&path).await.unwrap();
+    let s = TursoStore::open_with(&path, fs_objects::testing::options())
+        .await
+        .unwrap();
     let id = StoreInfo::identity(&s);
     s.put(obj("Note", "n"), ME).await.unwrap();
     drop(s);
@@ -31,14 +33,24 @@ async fn the_identity_survives_a_restart_and_a_file_copy() {
         std::fs::copy(&wal, dir.path().join("b.db-wal")).unwrap();
     }
     assert_eq!(
-        StoreInfo::identity(&TursoStore::open(&path).await.unwrap()),
+        StoreInfo::identity(
+            &TursoStore::open_with(&path, fs_objects::testing::options())
+                .await
+                .unwrap()
+        ),
         id
     );
     assert_eq!(
-        StoreInfo::identity(&TursoStore::open(&copy).await.unwrap()),
+        StoreInfo::identity(
+            &TursoStore::open_with(&copy, fs_objects::testing::options())
+                .await
+                .unwrap()
+        ),
         id
     );
-    let other = TursoStore::open(dir.path().join("c.db")).await.unwrap();
+    let other = TursoStore::open_with(dir.path().join("c.db"), fs_objects::testing::options())
+        .await
+        .unwrap();
     assert_ne!(StoreInfo::identity(&other), id);
 }
 
@@ -59,8 +71,11 @@ async fn the_identity_is_nowhere_in_the_log_and_every_change_leaves_it_alone() {
 #[tokio::test]
 async fn the_facade_and_the_trait_agree_and_is_encrypted_tells_the_truth() {
     let dir = tempfile::tempdir().unwrap();
-    let plain = TursoStore::open(dir.path().join("p.db")).await.unwrap();
+    let plain = TursoStore::open_with(dir.path().join("p.db"), fs_objects::testing::options())
+        .await
+        .unwrap();
     let opts = OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         key_provider: Some(std::sync::Arc::new(StaticKeyProvider(key()))),
         ..OpenOptions::default()
     };
@@ -79,7 +94,11 @@ async fn an_older_file_without_identity_gets_exactly_one_on_first_open() {
     // to show the first open makes one and later opens keep it.
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("old.db");
-    drop(TursoStore::open(&path).await.unwrap());
+    drop(
+        TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap(),
+    );
     let db = turso::Builder::new_local(path.to_str().unwrap())
         .build()
         .await
@@ -91,8 +110,16 @@ async fn an_older_file_without_identity_gets_exactly_one_on_first_open() {
     .await
     .unwrap();
     drop((c, db));
-    let first = StoreInfo::identity(&TursoStore::open(&path).await.unwrap());
-    let again = StoreInfo::identity(&TursoStore::open(&path).await.unwrap());
+    let first = StoreInfo::identity(
+        &TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap(),
+    );
+    let again = StoreInfo::identity(
+        &TursoStore::open_with(&path, fs_objects::testing::options())
+            .await
+            .unwrap(),
+    );
     assert_eq!(first, again);
     let rows = raw_sql(&path, "SELECT COUNT(*) FROM meta WHERE key = 'store_id'").await;
     assert_eq!(rows, vec!["Integer(1)".to_string()]);
@@ -105,7 +132,11 @@ async fn several_first_opens_at_once_all_succeed_and_agree_on_one_identity() {
     let tasks: Vec<_> = (0..6)
         .map(|_| {
             let p = path.clone();
-            tokio::spawn(async move { TursoStore::open(&p).await.map(|s| StoreInfo::identity(&s)) })
+            tokio::spawn(async move {
+                TursoStore::open_with(&p, fs_objects::testing::options())
+                    .await
+                    .map(|s| StoreInfo::identity(&s))
+            })
         })
         .collect();
     let mut ids = vec![];

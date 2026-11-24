@@ -30,9 +30,10 @@ pub fn obj(ty: &str, name: &str) -> StoredObject {
     StoredObject::new(e, "application/json", json!({ "n": name }))
 }
 
-/// A fresh in-memory store.
 pub async fn mem() -> TursoStore {
-    TursoStore::open_in_memory().await.unwrap()
+    TursoStore::open_with(":memory:", fs_objects::testing::options())
+        .await
+        .unwrap()
 }
 
 /// Names of the objects, in order.

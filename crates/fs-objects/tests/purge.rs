@@ -74,7 +74,9 @@ async fn synced_entries_are_counted_apart() {
 #[tokio::test]
 async fn the_bytes_leave_the_database_and_the_write_ahead_log() {
     let dir = tempfile::tempdir().unwrap();
-    let s = TursoStore::open(dir.path().join("p.db")).await.unwrap();
+    let s = TursoStore::open_with(dir.path().join("p.db"), fs_objects::testing::options())
+        .await
+        .unwrap();
     let mut x = note("x", &format!("{SECRET}{}", "z".repeat(20_000)));
     s.put(x.clone(), ME).await.unwrap();
     x.content = json!({"t": "clean"});
@@ -90,7 +92,9 @@ async fn the_bytes_leave_the_database_and_the_write_ahead_log() {
     assert_eq!(s.count(&Query::new().of_type("Note")).await.unwrap(), 2);
     assert_eq!(s.log_stats().await.unwrap().entries, 1);
     drop(s);
-    let s = TursoStore::open(dir.path().join("p.db")).await.unwrap();
+    let s = TursoStore::open_with(dir.path().join("p.db"), fs_objects::testing::options())
+        .await
+        .unwrap();
     assert_eq!(s.count(&Query::new().of_type("Note")).await.unwrap(), 2);
 }
 
@@ -99,6 +103,7 @@ async fn an_encrypted_store_purges_and_reopens() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("e.db");
     let opts = || OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         key_provider: Some(std::sync::Arc::new(StaticKeyProvider(key()))),
         ..OpenOptions::default()
     };

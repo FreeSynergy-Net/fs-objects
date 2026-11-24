@@ -38,6 +38,7 @@ impl Drop for Dir {
 
 pub fn opts() -> OpenOptions {
     OpenOptions {
+        owner: Some(fs_objects::testing::owner()),
         allow_sensitive_unencrypted: true,
         ..OpenOptions::default()
     }
